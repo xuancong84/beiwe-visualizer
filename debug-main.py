@@ -4,8 +4,8 @@ from core import *
 import datetime
 
 if __name__ == '__main__':
-	draw('moht.dsth.150@moht.com.sg_e3fb5e097f2b', None, None, 0.0, False, 'light.csv.gz', 'grouped values by each interval', '1D', 0.0, 0,
-		 'time chart grouped box plot', 'value', 'mean', '<entry-count>', False, 'no sort', True, False, False, True)
+	draw('moht.dsth.150@moht.com.sg_e3fb5e097f2b', None, None, 0.0, False, 'heart.csv.gz', 'grouped values by each interval', '1D', 0.0, 21,
+		 'time chart grouped box plot', 'HR', 'mean', '<entry-count>', False, 'no sort', False, False, False, True)
 
 	# init parameters
 	Username = 'moht.dsth.150@moht.com.sg_e3fb5e097f2b'

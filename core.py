@@ -43,7 +43,7 @@ study_name_map = defaultdict(lambda:{}, {
 								  'X':'moht.dsth.146@moht.com.sg_929e9c909aaa', 'T':'moht.dsth.147@moht.com.sg_b42e85c44950', 'A':'moht.dsth.148@moht.com.sg_29508afb5d99', 'QR-test':'moht.dsth.149@moht.com.sg_92df56d445a6'}
 })
 
-main_path = os.getenv('HOME')+'/projects/beiwe-gitlab/beiwe-visualizer/2.decrypted/'
+main_path = os.getenv('HOME')+'/projects/beiwe-gitlab/beiwe-backend/2.decrypted/'
 dropdown_studies = Dropdown(options=[d for d in os.listdir(main_path) if os.path.isdir(main_path+d)], description = 'Select Study')
 dropdown_userlist = Dropdown(options=[])
 def on_change_study(changes):
@@ -225,6 +225,19 @@ def split_by_cycle(df, cycle_in_days):
 		cur_end_datetime = cur_start_datetime
 	return ret[::-1]
 
+def set_index_to_value(df, value, col=None):
+	ret = df.copy()
+	if col: ret[col] = [value]*len(ret)
+	else: ret.index = [value]*len(ret)
+	return ret
+
+def sample(df, SelCol, N=256):
+	inc = round(len(df)/N)
+	if len(df)<=N or inc==1:
+		return df
+	ret = df.sort_values(SelCol)
+	return ret.iloc[0:-1:inc].append(ret.iloc[-1])
+
 def add_cycle_mean(df, Interval, cycle_in_days, SelCol=True):
 	if SelCol is True:
 		# compute cycle mean for each column
@@ -232,6 +245,27 @@ def add_cycle_mean(df, Interval, cycle_in_days, SelCol=True):
 		# combine all columns for each cycle, the 1st N-1 columns are named current_cycle, previous_cycle1/2/..., must rename to the last column
 		return [pd.concat([col_cycle_mean[[cycle]].rename(columns={cycle:col_cycle_mean.columns[-1]}) for col_cycle_mean in col_cycle_means], axis=1)
 				for cycle in col_cycle_means[0].columns[:-1]] + [pd.concat([col_cycle_mean[col_cycle_mean.columns[-1:]] for col_cycle_mean in col_cycle_means], axis=1)]
+
+	if 'DataFrameGroupBy' in str(type(df)):
+		data_map = OrderedDict([[k, sample(v.reset_index(drop=True), SelCol)] for k,v in df])
+		cycles = split_by_cycle(pd.DataFrame(index=data_map.keys()), cycle_in_days)
+		if len(cycles)>1 and len(cycles[0])<7:	# merge the 1st 2 cycles if the 1st cycle is less than 1 week
+			cycles = [cycles[0].append(cycles[1])] + cycles[2:]
+
+		# create hues for current_value
+		curr_cycle_dates = cycles[-1].index
+		ret = pd.concat([set_index_to_value(data_map[i], i, col='datetime') for i in curr_cycle_dates], ignore_index=True)
+		ret['hues'] = 'current_value'
+
+		# create hues for each cycle
+		for ii, cycle in enumerate(cycles[::-1]):
+			ret1 = pd.concat([set_index_to_value(data_map[cycle_tms], curr_tms, col='datetime') for curr_tms in curr_cycle_dates \
+							  for cycle_tms in cycle.index[cycle.index.dayofweek==curr_tms.dayofweek]], ignore_index=True)
+			ret1['hues'] = 'current_cycle' if ii==0 else ('previous_cycle%d'%ii)
+			ret = ret.append(ret1, ignore_index=True)
+
+		# return hued DataFrame instead of DataFrameGroupBy
+		return ret
 
 	dfs = split_by_cycle(df, cycle_in_days)
 	intv_in_sec = pd.to_timedelta(Interval).total_seconds()
@@ -252,6 +286,16 @@ def calc_bar_width_posi(N):
 	width = (0.8-(0.2 if N>1 else 0))/N
 	posi = [-i*1.2+N*0.6 for i in range(N)]
 	return width, posi
+
+def safe_log(data, SelCol, TakeLog):
+	if TakeLog:
+		try:
+			data[SelCol] = np.log(data[SelCol]+1)
+			return data, False
+		except:
+			return data, True
+	return data, False
+
 
 
 
@@ -366,6 +410,7 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 	if PlotType.startswith('display'):
 		data = df
 	elif Function in F1:
+		if not F1[Function]: df, TakeLog = safe_log(df, SelCol, TakeLog)
 		data = (df[[SelCol,DurCol]] if DurCol!='<entry-count>' else df[[SelCol]]).groupby(pd.Grouper(freq=Interval, base=IntvShift))
 		data = eval('data'+F1[Function])
 	elif Function == 'value range in each interval':
@@ -377,12 +422,8 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 	elif Function == 'pass through all':
 		data = df
 
-	if TakeLog:
-		try:
-			data[SelCol] = np.log(data[SelCol]+1)
-			TakeLog = False
-		except:
-			pass
+	data, TakeLog = safe_log(data, SelCol, TakeLog)
+
 
 	# Start plotting
 	dbg_data = data
@@ -423,17 +464,28 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 			xy_plot = data[selected_cls[::-1]].plot.area(stacked=True, rot=45, figsize=figsize, color=generate_colormap(N_cls))
 		xy_plot.set_xticklabels(labels, ha='right')
 		xy_plot.get_figure().subplots_adjust(right=0.8)
+		lhs, lls = xy_plot.get_legend_handles_labels()
+		lhs, lls = lhs[::-1], lls[::-1]
 		if 'datas' in locals():
-			lhs, lls = xy_plot.get_legend_handles_labels()
-			lhs = lhs[:len(lhs)//N][::-1]+[matplotlib.patches.Rectangle((0,0), 1, 1, edgecolor='none', visible=False)]*N
-			lls = lls[:len(lls)//N][::-1]+[('bar%d : '%(N-1-i))+('previous_cycle%d'%i if i else 'current_cycle') for i in range(N-1)][::-1]+['bar%d : current_value'%N]
+			lhs = lhs[:len(lhs)//N]+[matplotlib.patches.Rectangle((0,0), 1, 1, edgecolor='none', visible=False)]*N
+			lls = lls[:len(lls)//N]+[('bar%d : '%(N-1-i))+('previous_cycle%d'%i if i else 'current_cycle') for i in range(N-1)][::-1]+['bar%d : current_value'%N]
 			xy_plot.legend(lhs, lls, loc='center left', prop={'size': 10}, bbox_to_anchor=(1,0,0.2,1))
 		else:
-			xy_plot.legend(loc='center left', prop={'size': 10}, bbox_to_anchor=(1,0,0.2,1))
+			xy_plot.legend(lhs, lls, loc='center left', prop={'size': 10}, bbox_to_anchor=(1,0,0.2,1))
 	elif PlotType == 'time chart grouped box plot':
-		figsize, xticks, labels = calc_figsize_xticks(data, scale)
-		xy_plot = data.boxplot(subplots=False, rot=45, figsize=figsize)
-		xy_plot.set_xticklabels(labels, ha='right')
+		if CyclePeriod:
+			data = add_cycle_mean(data, Interval, CyclePeriod, SelCol)
+			figsize, xticks, labels = calc_figsize_xticks(pd.DataFrame(index=data.datetime.unique()), scale*data.hues.nunique())
+			# sns.set(rc={'figure.figsize': figsize})
+			fig, ax = plt.subplots(figsize=figsize)
+			xy_plot = sns.boxplot(x=data.datetime, y=SelCol, hue="hues", data=data, ax=ax)
+			xy_plot.legend(loc='center left', prop={'size': 10}, bbox_to_anchor=(1, 0, 0.2, 1))
+		else:
+			figsize, xticks, labels = calc_figsize_xticks(pd.DataFrame(index=[i for i, j in data]), scale)
+			data = data.apply(lambda x:x.reset_index(drop=True)).droplevel(1).reset_index()
+			xy_plot = data.boxplot(by='datetime', figsize=figsize)
+			xy_plot.get_figure().suptitle('')
+		xy_plot.set_xticklabels(labels, ha='right', rotation=45)
 	elif PlotType.startswith('time chart'):
 		if TakeLog: data = np.log(data+1)
 		if CyclePeriod: data = add_cycle_mean(data, Interval, CyclePeriod, SelCol)
@@ -462,8 +514,8 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 		data['day_of_week'] = data.index.dayofweek
 		data['hour'] = data.index.hour
 		piv = pd.pivot_table(data, values=SelCol, index='hour', columns='day_of_week', fill_value=0, aggfunc=eval('np.'+Extra))
-		xy_plot1 = sns.heatmap(piv, annot=True, cmap="plasma", fmt='.5g', linewidths=1, xticklabels=daysofweek)
-		xy_plot1.invert_yaxis()
+		xy_plot = sns.heatmap(piv, annot=True, cmap="plasma", fmt='.5g', linewidths=1, xticklabels=daysofweek)
+		xy_plot.invert_yaxis()
 		plt.tight_layout()
 		plt.title(SelCol)
 	elif PlotType == 'XY path':
@@ -504,13 +556,19 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 	if 'xy_plot' in locals():
 		# set Sunday xlabels to red
 		for xlab in xy_plot.get_xticklabels():
-			dow = pd.Timestamp(xlab._text).dayofweek
-			if dow in DAYOFWEEK_COLOR:
-				xlab.set_color(DAYOFWEEK_COLOR[dow])
+			try:
+				dow = pd.Timestamp(xlab._text).dayofweek
+				if dow in DAYOFWEEK_COLOR:
+					xlab.set_color(DAYOFWEEK_COLOR[dow])
+			except:
+				pass
 
 		# execute custom SubplotAxes options
 		for k,v in kwargs.items():
-			exec("xy_plot.%s('%s')" % (k, v))
+			try:
+				exec("xy_plot.%s('%s')" % (k, v))
+			except:
+				traceback.print_exc()
 		return xy_plot
 
 def update(**kwargs):
