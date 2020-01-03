@@ -4,8 +4,8 @@ from core import *
 import datetime
 
 if __name__ == '__main__':
-	draw('moht.dsth.150@moht.com.sg_e3fb5e097f2b', datetime.date(2019, 12, 18), datetime.date(2019, 12, 18), 0.0, False, 'sociabilityCallLog.csv.gz', '# of readings in each interval', '1D', 0.0, 0, 'display raw unprocessed data', 'app', 'mean', '<entry-count>', 'no sort', False, False, False, True)
-
+	draw('moht.dsth.150@moht.com.sg_e3fb5e097f2b', None, None, 0.0, False, 'light.csv.gz', 'grouped values by each interval', '1D', 0.0, 0,
+		 'time chart grouped box plot', 'value', 'mean', '<entry-count>', False, 'no sort', True, False, False, True)
 
 	# init parameters
 	Username = 'moht.dsth.150@moht.com.sg_e3fb5e097f2b'
@@ -17,6 +17,6 @@ if __name__ == '__main__':
 	df.orientation = df.orientation.apply(lambda t: ('outgoing' if t == 0 else 'incoming'))
 	plot1a = draw(df, None, None, 0.0, False, 'sociabilityLog' + file_suffix, 'grouped values by each interval', '1D',
 				  0.0, CyclePeriod, 'time chart stacked bar', 'orientation', 10,
-				  '<entry-count>', 'no sort', False, False, False, None, size_ratio=1, set_title='WhatsApp Messages', ylabel='log(N)')
+				  '<entry-count>', True, 'no sort', False, False, False, None, size_ratio=1, set_title='WhatsApp Messages', ylabel='log(N)')
 
 

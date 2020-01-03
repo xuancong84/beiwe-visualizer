@@ -27,7 +27,7 @@ pd.options.display.max_rows = 10000
 MAX_CHART_WIDTH = 400
 MAX_XTICK_LABELS = 1200
 CYCLE_COLORS = ['red', 'green', 'blue', 'yellow', 'purple', 'pink', 'brown', 'black'] # this also controls the max number of cycles to display
-
+DAYOFWEEK_COLOR = {5:'purple', 6:'red'}
 
 # initializations
 # Setup all paths and sources
@@ -201,11 +201,11 @@ def safe_display(df):
 	display(df)
 
 # every data point one tick, but labels must be sufficiently far apart
-def calc_figsize_xticks(data, scale):
+def calc_figsize_xticks(data, scale, mul=1):
 	chart_width = min(MAX_CHART_WIDTH, len(data)*0.4*scale)
 	figsize = [chart_width, 3*scale]
 	index = data.index if type(data)==pd.core.frame.DataFrame else [_[0] for _ in data]
-	min_value_interval = (index[-1] - index[0])*MAX_CHART_WIDTH/(chart_width*MAX_XTICK_LABELS)
+	min_value_interval = (index[-1] - index[0])*MAX_CHART_WIDTH/(chart_width*MAX_XTICK_LABELS)/mul
 	xticks = [str(g) for g in index]
 	labels = [g for g in index]
 	for ii,t in enumerate(labels):
@@ -282,7 +282,7 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 	global fig, axes, dbg_data, dbg_df, g_prevPlotType, dbg_plot
 
 	if DoPlot!=None and not isinstance(Username, pd.DataFrame):
-		print([Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Function, Interval, IntvShift, CyclePeriod, PlotType, SelCol, Extra, DurCol,
+		print([Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Function, Interval, IntvShift, CyclePeriod, PlotType, SelCol, Extra, DurCol, ForwardFill,
 			   SortByCol, TakeLog, DrawArrow, SpreadXYaxis, DoPlot])
 
 	if type(DoPlot) is bool:
@@ -409,7 +409,7 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 			if CyclePeriod:
 				datas = add_cycle_mean(data, Interval, CyclePeriod)
 				N = len(datas)
-				figsize, xticks, labels = calc_figsize_xticks(datas[0], scale)
+				figsize, xticks, labels = calc_figsize_xticks(datas[0], scale, N)
 				figsize[0] *= N
 				width, posi = calc_bar_width_posi(N)
 				for i, data in enumerate(datas):
@@ -437,7 +437,7 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 	elif PlotType.startswith('time chart'):
 		if TakeLog: data = np.log(data+1)
 		if CyclePeriod: data = add_cycle_mean(data, Interval, CyclePeriod, SelCol)
-		figsize, xticks, labels = calc_figsize_xticks(data, scale)
+		figsize, xticks, labels = calc_figsize_xticks(data, scale, len(data.columns) if CyclePeriod else 1)
 		if CyclePeriod: figsize[0] *= len(data.columns)
 		if 'bar' in PlotType:
 			xy_plot = data.plot.bar(figsize=figsize, rot=45)
@@ -462,8 +462,8 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 		data['day_of_week'] = data.index.dayofweek
 		data['hour'] = data.index.hour
 		piv = pd.pivot_table(data, values=SelCol, index='hour', columns='day_of_week', fill_value=0, aggfunc=eval('np.'+Extra))
-		xy_plot = sns.heatmap(piv, annot=True, cmap="plasma", fmt='.5g', linewidths=1, xticklabels=daysofweek)
-		xy_plot.invert_yaxis()
+		xy_plot1 = sns.heatmap(piv, annot=True, cmap="plasma", fmt='.5g', linewidths=1, xticklabels=daysofweek)
+		xy_plot1.invert_yaxis()
 		plt.tight_layout()
 		plt.title(SelCol)
 	elif PlotType == 'XY path':
@@ -502,6 +502,13 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 		xy_plot = data.plot()
 	print('Loading finished! Plotting ...', flush=True)
 	if 'xy_plot' in locals():
+		# set Sunday xlabels to red
+		for xlab in xy_plot.get_xticklabels():
+			dow = pd.Timestamp(xlab._text).dayofweek
+			if dow in DAYOFWEEK_COLOR:
+				xlab.set_color(DAYOFWEEK_COLOR[dow])
+
+		# execute custom SubplotAxes options
 		for k,v in kwargs.items():
 			exec("xy_plot.%s('%s')" % (k, v))
 		return xy_plot
