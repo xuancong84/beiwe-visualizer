@@ -1,6 +1,7 @@
 # beiwe-visualizer
 This is an interactive dashboard for visualizing and analyzing time-series study participant data. It uses Jupyter notebook, matplotlib and pandas.
-You must organize your data into the correct directory structure: main-path/study-name/user-name/feature-name/[timestamp-sortable].csv
+You need to organize your data into the correct directory structure: main-path/study-name/user-name/feature-name/[timestamp-sortable].csv
+Alternatively, you can merge all history data into a single file for every feature: main-path/study-name/user-name/feature-name.csv.gz
 You can change study, user, feature, date range, etc., and visualize every piece of data in many possible ways as shown below. You can also view raw unprocessed and processed data.
 
 ![01](/img/01.png)
