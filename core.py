@@ -201,9 +201,10 @@ def safe_display(df):
 	display(df)
 
 # every data point one tick, but labels must be sufficiently far apart
-def calc_figsize_xticks(data, scale, mul=1):
+def calc_figsize_xticks(data, scale, width_mul=1):
+	mul = max(1, width_mul//2+0.5)
 	chart_width = min(MAX_CHART_WIDTH, len(data)*0.4*scale)
-	figsize = [chart_width, 3*scale]
+	figsize = [chart_width*mul, 3*scale]
 	index = data.index if type(data)==pd.core.frame.DataFrame else [_[0] for _ in data]
 	min_value_interval = (index[-1] - index[0])*MAX_CHART_WIDTH/(chart_width*MAX_XTICK_LABELS)/mul
 	xticks = [str(g) for g in index]
@@ -295,6 +296,13 @@ def safe_log(data, SelCol, TakeLog):
 		except:
 			return data, True
 	return data, False
+
+def convert_index_to_string(df, col=None):
+	if col:
+		df[col] = df[col].apply(lambda x:str(x))
+	else:
+		df.index = df.index.map(lambda x:str(x))
+	return df
 
 
 
@@ -451,7 +459,6 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 				datas = add_cycle_mean(data, Interval, CyclePeriod)
 				N = len(datas)
 				figsize, xticks, labels = calc_figsize_xticks(datas[0], scale, N)
-				figsize[0] *= N
 				width, posi = calc_bar_width_posi(N)
 				for i, data in enumerate(datas):
 					xy_plot = data[selected_cls[::-1]].plot.bar(stacked=True, rot=45, position=posi[i], width=width,
@@ -475,9 +482,9 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 	elif PlotType == 'time chart grouped box plot':
 		if CyclePeriod:
 			data = add_cycle_mean(data, Interval, CyclePeriod, SelCol)
-			figsize, xticks, labels = calc_figsize_xticks(pd.DataFrame(index=data.datetime.unique()), scale*data.hues.nunique())
-			# sns.set(rc={'figure.figsize': figsize})
+			figsize, xticks, labels = calc_figsize_xticks(pd.DataFrame(index=data.datetime.unique()), scale, data.hues.nunique())
 			fig, ax = plt.subplots(figsize=figsize)
+			data = convert_index_to_string(data, 'datetime')
 			xy_plot = sns.boxplot(x=data.datetime, y=SelCol, hue="hues", data=data, ax=ax)
 			xy_plot.legend(loc='center left', prop={'size': 10}, bbox_to_anchor=(1, 0, 0.2, 1))
 		else:
@@ -490,7 +497,6 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 		if TakeLog: data = np.log(data+1)
 		if CyclePeriod: data = add_cycle_mean(data, Interval, CyclePeriod, SelCol)
 		figsize, xticks, labels = calc_figsize_xticks(data, scale, len(data.columns) if CyclePeriod else 1)
-		if CyclePeriod: figsize[0] *= len(data.columns)
 		if 'bar' in PlotType:
 			xy_plot = data.plot.bar(figsize=figsize, rot=45)
 		elif 'scatter' in PlotType:
