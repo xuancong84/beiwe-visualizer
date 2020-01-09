@@ -47,7 +47,7 @@ study_name_map = defaultdict(lambda:{}, {
 								  'X':'moht.dsth.146@moht.com.sg_929e9c909aaa', 'T':'moht.dsth.147@moht.com.sg_b42e85c44950', 'A':'moht.dsth.148@moht.com.sg_29508afb5d99', 'QR-test':'moht.dsth.149@moht.com.sg_92df56d445a6'}
 })
 
-main_path = os.getenv('HOME')+'/projects/beiwe-gitlab/beiwe-backend/2.decrypted/'
+main_path = os.getenv('HOME')+'/projects/beiwe-gitlab/beiwe-visualizer/2.decrypted/'
 dropdown_studies = Dropdown(options=[d for d in os.listdir(main_path) if os.path.isdir(main_path+d)], description = 'Select Study')
 dropdown_userlist = Dropdown(options=[])
 def on_change_study(changes):
@@ -491,16 +491,18 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 	elif PlotType == 'time chart grouped box plot':
 		if CyclePeriod:
 			data = add_cycle_mean(data, Interval, CyclePeriod, SelCol)
-			figsize, xticks, labels = calc_figsize_xticks(pd.DataFrame(index=data.datetime.unique()), scale, data.hues.nunique())
+			figsize, xticks, labels = calc_figsize_xticks(pd.DataFrame(index=sorted(data.datetime.unique())), scale, data.hues.nunique())
 			fig, ax = plt.subplots(figsize=figsize)
 			data = convert_index_to_string(data, 'datetime')
-			xy_plot = sns.boxplot(x=data.datetime, y=SelCol, hue="hues", data=data, ax=ax)
+			xy_plot = sns.boxplot(x=data.datetime, y=SelCol, hue="hues", data=data, ax=ax,
+								  hue_order=[('previous_cycle%d'%i if i else 'current_cycle') for i in range(data.hues.nunique()-1)]+['current_value'])
 			xy_plot.legend(loc='center left', prop={'size': 10}, bbox_to_anchor=(1, 0, 0.2, 1))
 		else:
 			figsize, xticks, labels = calc_figsize_xticks(pd.DataFrame(index=[i for i, j in data]), scale)
 			data = data.apply(lambda x:x.reset_index(drop=True)).droplevel(1).reset_index()
 			xy_plot = data.boxplot(by='datetime', figsize=figsize)
 			xy_plot.get_figure().suptitle('')
+		os.data = data
 		xy_plot.set_xticklabels(labels, ha='right', rotation=45)
 	elif PlotType.startswith('time chart'):
 		if TakeLog: data = np.log(data+1)
