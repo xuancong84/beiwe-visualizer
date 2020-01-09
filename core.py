@@ -20,6 +20,7 @@ from collections import *
 disable_js = """IPython.OutputArea.prototype._should_scroll = function(lines) {return false;} """
 display(Javascript(disable_js))
 
+# use full browser width
 display(HTML("<style>.container { width:100% !important; }</style>"))
 pd.options.display.width = 1000
 pd.options.display.max_columns = 1001
@@ -28,6 +29,9 @@ MAX_CHART_WIDTH = 400
 MAX_XTICK_LABELS = 1200
 CYCLE_COLORS = ['red', 'green', 'blue', 'yellow', 'purple', 'pink', 'brown', 'black'] # this also controls the max number of cycles to display
 DAYOFWEEK_COLOR = {5:'purple', 6:'red'}
+
+# set grid style
+sns.set_style('darkgrid')
 
 # initializations
 # Setup all paths and sources
@@ -304,6 +308,11 @@ def convert_index_to_string(df, col=None):
 		df.index = df.index.map(lambda x:str(x))
 	return df
 
+def stacked_log(df):
+	df_sum = df.sum(axis=1)
+	ret = df.mul(np.log(df_sum+1), axis=0).div(df_sum, axis=0).fillna(0)
+	return ret
+
 
 
 
@@ -453,7 +462,7 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 		data = data0.groupby(pd.Grouper(freq=Interval, base=IntvShift))
 		map_null = lambda t:t if len(t) else {selected_cls[0]:0}
 		data = pd.DataFrame.from_dict({g[0]:map_null(agg_fn(g[1],SelCol)) for g in data}, orient='index').fillna(0).sort_index()
-		if TakeLog: data = np.log(data+1)
+		if TakeLog: data = stacked_log(data)
 		if PlotType.endswith('bar'):
 			if CyclePeriod:
 				datas = add_cycle_mean(data, Interval, CyclePeriod)
