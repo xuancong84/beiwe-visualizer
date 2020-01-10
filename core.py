@@ -47,7 +47,9 @@ study_name_map = defaultdict(lambda:{}, {
 								  'X':'moht.dsth.146@moht.com.sg_929e9c909aaa', 'T':'moht.dsth.147@moht.com.sg_b42e85c44950', 'A':'moht.dsth.148@moht.com.sg_29508afb5d99', 'QR-test':'moht.dsth.149@moht.com.sg_92df56d445a6'}
 })
 
-main_path = os.getenv('HOME')+'/projects/beiwe-gitlab/beiwe-visualizer/2.decrypted/'
+# specify source folder directory
+if 'main_path' not in globals():
+	main_path = os.path.dirname(os.path.abspath(__file__))+'/2.decrypted/'
 dropdown_studies = Dropdown(options=[d for d in os.listdir(main_path) if os.path.isdir(main_path+d)], description = 'Select Study')
 dropdown_userlist = Dropdown(options=[])
 def on_change_study(changes):
