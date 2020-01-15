@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import matplotlib.transforms as trf
 from math import isnan, nan, inf
 from matplotlib.widgets import Slider
 from glob import glob
@@ -15,6 +16,7 @@ import ipywidgets as widgets
 from IPython.display import clear_output, display, HTML, Javascript
 from termcolor import colored
 from collections import *
+
 
 # disable the annoying cell scrolling (browser scroll is enough)
 disable_js = """IPython.OutputArea.prototype._should_scroll = function(lines) {return false;} """
@@ -207,7 +209,7 @@ def safe_display(df):
 	display(df)
 
 # every data point one tick, but labels must be sufficiently far apart
-def calc_figsize_xticks(data, scale, width_mul=1):
+def calc_figsize_xticks(data, scale=1, width_mul=1):
 	mul = max(1, width_mul//2+0.5)
 	chart_width = min(MAX_CHART_WIDTH, len(data)*0.4*scale)
 	figsize = [chart_width*mul, 3*scale]
@@ -294,6 +296,13 @@ def calc_bar_width_posi(N):
 	posi = [-i*1.2+N*0.6 for i in range(N)]
 	return width, posi
 
+def convert_index_to_string(df, col=None):
+	if col:
+		df[col] = df[col].apply(lambda x:str(x))
+	else:
+		df.index = df.index.map(lambda x:str(x))
+	return df
+
 def safe_log(data, SelCol, TakeLog):
 	if TakeLog:
 		try:
@@ -302,13 +311,6 @@ def safe_log(data, SelCol, TakeLog):
 		except:
 			return data, True
 	return data, False
-
-def convert_index_to_string(df, col=None):
-	if col:
-		df[col] = df[col].apply(lambda x:str(x))
-	else:
-		df.index = df.index.map(lambda x:str(x))
-	return df
 
 def stacked_log(df):
 	df_sum = df.sum(axis=1)
@@ -339,14 +341,14 @@ intv_shift0 = FloatSlider(min=0, max=1, step=0.01, value=0, continuous_update=Fa
 cycle_period0 = IntSlider(min=0, max=100, step=1, value=0, continuous_update=False, description='Cycle (days)')
 dateoffset0 = widgets.BoundedFloatText(value=0, min=-10, max=10.0, step=1, description='Date Offset')
 interval0 = Dropdown(options=['1min', '5min', '15min', '30min', '1H', '2H', '3H', '6H', '12H', '1D', '2D', '1W', '1M'], value='1D', description='Bin Interval')
-fig, axes, g_prevPlotType, g_lock, dbg_data, dbg_df, dbg_plot = None, None, None, False, None, None, None
+fig, axes, g_prevPlotType, g_lock = None, None, None, False
 def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Function, Interval, IntvShift, CyclePeriod, PlotType, SelCol, Extra, DurCol, ForwardFill,
-		   SortByCol, TakeLog, DrawArrow, SpreadXYaxis, DoPlot, size_ratio=1, **kwargs):
-	global fig, axes, dbg_data, dbg_df, g_prevPlotType, dbg_plot
+		   SortByCol, TakeLog, DrawArrow, SpreadXYaxis, DoPlot, size_ratio=1, post_processor=None, ax=None, **kwargs):
+	global fig, axes, g_prevPlotType
 
 	if DoPlot!=None and not isinstance(Username, pd.DataFrame):
-		print([Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Function, Interval, IntvShift, CyclePeriod, PlotType, SelCol, Extra, DurCol, ForwardFill,
-			   SortByCol, TakeLog, DrawArrow, SpreadXYaxis, DoPlot])
+		print([Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Function, Interval, IntvShift, CyclePeriod,
+			   PlotType, SelCol, Extra, DurCol, ForwardFill, SortByCol, TakeLog, DrawArrow, SpreadXYaxis, DoPlot])
 
 	if type(DoPlot) is bool:
 		## Prepare control items
@@ -395,7 +397,8 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 		display(HTML('<font color=red>Warning: the whole data is empty</font>'))
 		return
 
-	print('Processing data ...', flush=True)
+	if DoPlot is not None:
+		print('Processing data ...', flush=True)
 	dfc = dfa.sort_values(SortByCol) if SortByCol!='no sort' else dfa.copy()
 	df = dfc = dfc.ffill() if ForwardFill else dfc
 	if StartDate!=None or LastDate!=None:
@@ -414,7 +417,7 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 		dateoffset0.max = dateoffset0.min = dateoffset0.value = 0
 
 	# Warn and return if empty
-	dbg_df = df
+	os.df = df
 	if df.shape[0] == 0:
 		display(HTML('<font color=red>Warning: selected data is empty</font>'))
 		return
@@ -444,8 +447,8 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 	data, TakeLog = safe_log(data, SelCol, TakeLog)
 
 
-	# Start plotting
-	dbg_data = data
+	### Start plotting
+	os.data = data
 	agg_fn = (lambda data, c : data[[c, DurCol]].groupby(c).sum().sort_values(DurCol, ascending=False)[DurCol]) \
 		if DurCol!='<entry-count>' else (lambda data,c:data[c].value_counts())
 	if hasattr(data,'shape') and data.shape[0] == 0:
@@ -465,6 +468,9 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 		map_null = lambda t:t if len(t) else {selected_cls[0]:0}
 		data = pd.DataFrame.from_dict({g[0]:map_null(agg_fn(g[1],SelCol)) for g in data}, orient='index').fillna(0).sort_index()
 		if TakeLog: data = stacked_log(data)
+		figsize, xticks, labels = calc_figsize_xticks(data, scale)
+		if post_processor is not None:
+			data, labels, figsize  = post_processor(data, labels, figsize)
 		if PlotType.endswith('bar'):
 			if CyclePeriod:
 				datas = add_cycle_mean(data, Interval, CyclePeriod)
@@ -473,28 +479,28 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 				width, posi = calc_bar_width_posi(N)
 				for i, data in enumerate(datas):
 					xy_plot = data[selected_cls[::-1]].plot.bar(stacked=True, rot=45, position=posi[i], width=width,
-																ax=xy_plot if i else None, figsize=figsize, color=generate_colormap(N_cls))
+																ax=xy_plot if i else ax, figsize=figsize, color=generate_colormap(N_cls))
 			else:
-				figsize, xticks, labels = calc_figsize_xticks(data, scale)
-				xy_plot = data[selected_cls[::-1]].plot.bar(stacked=True, rot=45, figsize=figsize, color=generate_colormap(N_cls))
+				xy_plot = data[selected_cls[::-1]].plot.bar(stacked=True, rot=45, figsize=None if ax else figsize, ax=ax, color=generate_colormap(N_cls))
 		elif PlotType.endswith('area'):
-			figsize, xticks, labels = calc_figsize_xticks(data, scale)
-			xy_plot = data[selected_cls[::-1]].plot.area(stacked=True, rot=45, figsize=figsize, color=generate_colormap(N_cls))
+			xy_plot = data[selected_cls[::-1]].plot.area(stacked=True, rot=45, figsize=None if ax else figsize, color=generate_colormap(N_cls))
 		xy_plot.set_xticklabels(labels, ha='right')
-		xy_plot.get_figure().subplots_adjust(right=0.8)
-		lhs, lls = xy_plot.get_legend_handles_labels()
-		lhs, lls = lhs[::-1], lls[::-1]
-		if 'datas' in locals():
-			lhs = lhs[:len(lhs)//N]+[matplotlib.patches.Rectangle((0,0), 1, 1, edgecolor='none', visible=False)]*N
-			lls = lls[:len(lls)//N]+[('bar%d : '%(N-1-i))+('previous_cycle%d'%i if i else 'current_cycle') for i in range(N-1)][::-1]+['bar%d : current_value'%N]
-			xy_plot.legend(lhs, lls, loc='center left', prop={'size': 10}, bbox_to_anchor=(1,0,0.2,1))
-		else:
-			xy_plot.legend(lhs, lls, loc='center left', prop={'size': 10}, bbox_to_anchor=(1,0,0.2,1))
+		if ax is None:
+			xy_plot.get_figure().subplots_adjust(right=0.8)
+			lhs, lls = xy_plot.get_legend_handles_labels()
+			lhs, lls = lhs[::-1], lls[::-1]
+			if 'datas' in locals():
+				lhs = lhs[:len(lhs)//N]+[matplotlib.patches.Rectangle((0,0), 1, 1, edgecolor='none', visible=False)]*N
+				lls = lls[:len(lls)//N]+[('bar%d : '%(N-1-i))+('previous_cycle%d'%i if i else 'current_cycle') for i in range(N-1)][::-1]+['bar%d : current_value'%N]
+				xy_plot.legend(lhs, lls, loc='center left', prop={'size': 10}, bbox_to_anchor=(1,0,0.2,1))
+			else:
+				xy_plot.legend(lhs, lls, loc='center left', prop={'size': 10}, bbox_to_anchor=(1,0,0.2,1))
 	elif PlotType == 'time chart grouped box plot':
 		if CyclePeriod:
 			data = add_cycle_mean(data, Interval, CyclePeriod, SelCol)
 			figsize, xticks, labels = calc_figsize_xticks(pd.DataFrame(index=sorted(data.datetime.unique())), scale, data.hues.nunique())
-			fig, ax = plt.subplots(figsize=figsize)
+			if ax is None:
+				fig, ax = plt.subplots(figsize=figsize)
 			data = convert_index_to_string(data, 'datetime')
 			xy_plot = sns.boxplot(x=data.datetime, y=SelCol, hue="hues", data=data, ax=ax,
 								  hue_order=[('previous_cycle%d'%i if i else 'current_cycle') for i in range(data.hues.nunique()-1)]+['current_value'])
@@ -502,20 +508,24 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 		else:
 			figsize, xticks, labels = calc_figsize_xticks(pd.DataFrame(index=[i for i, j in data]), scale)
 			data = data.apply(lambda x:x.reset_index(drop=True)).droplevel(1).reset_index()
-			xy_plot = data.boxplot(by='datetime', figsize=figsize)
+			if post_processor is not None:
+				data, labels, figsize = post_processor(data, labels, figsize)
+			xy_plot = data.boxplot(by='datetime', figsize=figsize, ax=ax)
 			xy_plot.get_figure().suptitle('')
 		os.data = data
 		xy_plot.set_xticklabels(labels, ha='right', rotation=45)
 	elif PlotType.startswith('time chart'):
-		if TakeLog: data = np.log(data+1)
+		if TakeLog: data = safe_log(data)[0]
 		if CyclePeriod: data = add_cycle_mean(data, Interval, CyclePeriod, SelCol)
 		figsize, xticks, labels = calc_figsize_xticks(data, scale, len(data.columns) if CyclePeriod else 1)
+		if post_processor is not None:
+			data, labels, figsize = post_processor(data, labels, figsize)
 		if 'bar' in PlotType:
-			xy_plot = data.plot.bar(figsize=figsize, rot=45)
+			xy_plot = data.plot.bar(figsize=None if ax else figsize, rot=45, ax=ax)
 		elif 'scatter' in PlotType:
 			data['tms'] = data.index.astype(int)
 			if CyclePeriod:
-				xy_plot = data.plot.scatter(x='tms', y=SelCol, figsize=figsize, color=CYCLE_COLORS[0], label=SelCol,
+				xy_plot = data.plot.scatter(x='tms', y=SelCol, figsize=None if ax else figsize, ax=ax, color=CYCLE_COLORS[0], label=SelCol,
 											xticks=data.tms, rot=45, xlim=(data.tms[0], data.tms[-1]))
 				for cycle_n in range(len(data.columns)):
 					cycle_name = 'current_cycle' if cycle_n==0 else ('previous_cycle%d'%cycle_n)
@@ -523,11 +533,12 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 					data.plot.scatter(x='tms', y=cycle_name, figsize=figsize, ax=xy_plot, color=CYCLE_COLORS[cycle_n+1], label=cycle_name,
 									  xticks=data.tms, rot=45, xlim=(data.tms[0], data.tms[-1]))
 			else:
-				xy_plot = data.plot.scatter(x='tms', y=SelCol, figsize=figsize, xticks=data.tms, rot=45, xlim=(data.tms[0], data.tms[-1]))
+				xy_plot = data.plot.scatter(x='tms', y=SelCol, figsize=None if ax else figsize, xticks=data.tms, ax=ax, rot=45, xlim=(data.tms[0], data.tms[-1]))
 		elif 'line' in PlotType:
-			xy_plot = data.plot.line(figsize=figsize, xticks=xticks, rot=45)
+			xy_plot = data.plot.line(figsize=None if ax else figsize, xticks=xticks, rot=45, ax=ax)
 		xy_plot.set_xticklabels(labels, ha='right')
-		xy_plot.legend(loc='center left', prop={'size': 10}, bbox_to_anchor=(1,0,0.2,1))
+		if ax is None:
+			xy_plot.legend(loc='center left', prop={'size': 10}, bbox_to_anchor=(1,0,0.2,1))
 	elif PlotType == 'value heatmap':
 		fig, ax = plt.subplots(figsize=[v*0.8 for v in figsize])
 		data['day_of_week'] = data.index.dayofweek
@@ -571,7 +582,9 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 		safe_display(dfa)
 	else:
 		xy_plot = data.plot()
-	print('Loading finished! Plotting ...', flush=True)
+
+	if DoPlot is not None:
+		print('Loading finished! Plotting ...', flush=True)
 	if 'xy_plot' in locals():
 		# set Sunday xlabels to red
 		for xlab in xy_plot.get_xticklabels():
