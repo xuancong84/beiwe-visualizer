@@ -291,6 +291,11 @@ def add_cycle_mean(df, Interval, cycle_in_days, SelCol=True):
 		ret = ret.join(prev.rename(columns={SelCol:('current_cycle' if ii==0 else 'previous_cycle%d'%ii)}).set_index(ret.index))
 	return ret[ret.columns[::-1]]
 
+def FFT(data, labels, figsize):
+	tms_delta = abs(data.index[1]-data.index[0])
+	ret = pd.DataFrame(abs(np.fft.fft(data.fillna(0), axis=0)), columns=data.columns, index=[tms_delta*(i+1) for i in range(len(data))])
+	return ret, ret.index, figsize
+
 def calc_bar_width_posi(N):
 	width = (0.8-(0.2 if N>1 else 0))/N
 	posi = [-i*1.2+N*0.6 for i in range(N)]
@@ -343,12 +348,12 @@ dateoffset0 = widgets.BoundedFloatText(value=0, min=-10, max=10.0, step=1, descr
 interval0 = Dropdown(options=['1min', '5min', '15min', '30min', '1H', '2H', '3H', '6H', '12H', '1D', '2D', '1W', '1M'], value='1D', description='Bin Interval')
 fig, axes, g_prevPlotType, g_lock = None, None, None, False
 def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Function, Interval, IntvShift, CyclePeriod, PlotType, SelCol, Extra, DurCol, ForwardFill,
-		   SortByCol, TakeLog, DrawArrow, SpreadXYaxis, DoPlot, size_ratio=1, post_processor=None, ax=None, **kwargs):
+		   SortByCol, TakeLog, TakeFFT, DrawArrow, SpreadXYaxis, DoPlot, size_ratio=1, post_processor=None, ax=None, **kwargs):
 	global fig, axes, g_prevPlotType
 
 	if DoPlot!=None and not isinstance(Username, pd.DataFrame):
 		print([Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Function, Interval, IntvShift, CyclePeriod,
-			   PlotType, SelCol, Extra, DurCol, ForwardFill, SortByCol, TakeLog, DrawArrow, SpreadXYaxis, DoPlot])
+			   PlotType, SelCol, Extra, DurCol, ForwardFill, SortByCol, TakeLog, TakeFFT, DrawArrow, SpreadXYaxis, DoPlot])
 
 	if type(DoPlot) is bool:
 		## Prepare control items
@@ -518,6 +523,8 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 		if TakeLog: data = safe_log(data)[0]
 		if CyclePeriod: data = add_cycle_mean(data, Interval, CyclePeriod, SelCol)
 		figsize, xticks, labels = calc_figsize_xticks(data, scale, len(data.columns) if CyclePeriod else 1)
+		if TakeFFT:
+			data, labels, figsize = FFT(data, labels, figsize)
 		if post_processor is not None:
 			data, labels, figsize = post_processor(data, labels, figsize)
 		if 'bar' in PlotType:
@@ -620,7 +627,7 @@ W = interactive(update,
 	PlotType = ['time chart (bar)', 'time chart (line)', 'time chart (scatter)', 'time chart stacked bar', 'time chart stacked area', 'time chart grouped box plot',
 				'value heatmap', 'XY path', 'frequency distribution (h-bar)', 'frequency distribution (pie)', 'histogram of values', 'show pipeline processed data',
 				'display selected/pre-computed data', 'display raw unprocessed data'], Extra = drop1, SelCol = select_column0, DurCol = select_durCol0, ForwardFill = False, # 10-14
-	SortByCol = sort_column, TakeLog = False, DrawArrow = False, SpreadXYaxis = False,
+	SortByCol = sort_column, TakeLog = False, TakeFFT = False, DrawArrow = False, SpreadXYaxis = False,
 	DoPlot = ToggleButton(value=False, description='Update Plot') # -2
 	)
 

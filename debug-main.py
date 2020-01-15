@@ -23,7 +23,7 @@ def group_dates(data, labels, figsize):
 
 if __name__ == '__main__':
 	# draw('moht.dsth.150@moht.com.sg_e3fb5e097f2b', None, None, 0.0, False, 'heart.csv.gz', 'grouped values by each interval', '1D', 0.0, 21,
-	# 	 'time chart grouped box plot', 'HR', 'mean', '<entry-count>', False, 'no sort', False, False, False, True)
+	# 	 'time chart grouped box plot', 'HR', 'mean', '<entry-count>', False, 'no sort', False, False, False, False, True)
 
 	# init parameters
 	os.DateGroup = '30,30,7,7'
@@ -37,7 +37,7 @@ if __name__ == '__main__':
 	df = load_df(Username, 'sociabilityLog' + file_suffix).copy()
 	df.orientation = df.orientation.apply(lambda t: ('outgoing' if t == 0 else 'incoming'))
 	plot1a = draw(df, None, None, 0.0, False, 'sociabilityLog'+file_suffix, 'grouped values by each interval',
-				'1D', 0.0, 0, 'time chart stacked bar', 'orientation', 10, '<entry-count>', True, 'no sort', True, False, False, None,
+				'1D', 0.0, 0, 'time chart stacked bar', 'orientation', 10, '<entry-count>', True, 'no sort', True, False, False, False, None,
 				post_processor=PP, ax=axs[0], set_title='WhatsApp Messages', set_ylabel='log(total#)')
 
 
