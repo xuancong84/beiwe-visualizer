@@ -28,16 +28,20 @@ if __name__ == '__main__':
 	# init parameters
 	os.DateGroup = '30,30,7,7'
 	PP = group_dates
-	fig, axs = plt.subplots(nrows=1, ncols=5, figsize=[16, 4])
 	Username = 'moht.dsth.150@moht.com.sg_e3fb5e097f2b'
 	CyclePeriod = 21
 	file_suffix = '.csv.gz'
 
-	# sociability messages
-	df = load_df(Username, 'sociabilityLog' + file_suffix).copy()
-	df.orientation = df.orientation.apply(lambda t: ('outgoing' if t == 0 else 'incoming'))
-	plot1a = draw(df, None, None, 0.0, False, 'sociabilityLog'+file_suffix, 'grouped values by each interval',
-				'1D', 0.0, 0, 'time chart stacked bar', 'orientation', 10, '<entry-count>', True, 'no sort', True, False, False, False, None,
-				post_processor=PP, ax=axs[0], set_title='WhatsApp Messages', set_ylabel='log(total#)')
+	# arrange into horizontal grid
+	fig, axs = plt.subplots(nrows=1, ncols=3, figsize=[12, 4])
+
+	# sleep stage
+	df = load_df(Username, 'sleep' + file_suffix).copy()
+	df = df[df.Level != 'main']
+	df.Seconds /= 3600
+	plot3 = draw(df, None, None, 0.0, False, 'sleep.csv.gz', 'sum in each interval', '1D', 0.5, 0,
+				 'time chart (bar)', 'Seconds', 'mean',
+				 '<entry-count>', False, 'no sort', False, False, False, False, True, post_processor=PP, ax=axs[0],
+				 set_title='Sleep Stage', set_ylabel='hours')
 
 

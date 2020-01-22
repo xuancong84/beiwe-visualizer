@@ -50,8 +50,7 @@ study_name_map = defaultdict(lambda:{}, {
 })
 
 # specify source folder directory
-if 'main_path' not in globals():
-	main_path = os.path.dirname(os.path.abspath(__file__))+'/2.decrypted/'
+main_path = os.main_path if hasattr(os, 'main_path') else os.path.dirname(os.path.abspath(__file__))+'/2.decrypted/'
 dropdown_studies = Dropdown(options=[d for d in os.listdir(main_path) if os.path.isdir(main_path+d)], description = 'Select Study')
 dropdown_userlist = Dropdown(options=[])
 def on_change_study(changes):
@@ -311,7 +310,7 @@ def convert_index_to_string(df, col=None):
 def safe_log(data, SelCol, TakeLog):
 	if TakeLog:
 		try:
-			data[SelCol] = np.log(data[SelCol]+1)
+			data.loc[:,SelCol] = np.log(data[SelCol]+1)
 			return data, False
 		except:
 			return data, True
@@ -348,7 +347,7 @@ dateoffset0 = widgets.BoundedFloatText(value=0, min=-10, max=10.0, step=1, descr
 interval0 = Dropdown(options=['1min', '5min', '15min', '30min', '1H', '2H', '3H', '6H', '12H', '1D', '2D', '1W', '1M'], value='1D', description='Bin Interval')
 fig, axes, g_prevPlotType, g_lock = None, None, None, False
 def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Function, Interval, IntvShift, CyclePeriod, PlotType, SelCol, Extra, DurCol, ForwardFill,
-		   SortByCol, TakeLog, TakeFFT, DrawArrow, SpreadXYaxis, DoPlot, size_ratio=1, post_processor=None, ax=None, **kwargs):
+		   SortByCol, TakeLog, TakeFFT, DrawArrow, SpreadXYaxis, DoPlot, size_ratio=1, post_processor=None, ax=None, plot_options={}, **kwargs):
 	global fig, axes, g_prevPlotType
 
 	if DoPlot!=None and not isinstance(Username, pd.DataFrame):
@@ -366,12 +365,14 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 		feature_list0.value = Feature if Feature in feature_list0.options else feature_list0.options[0]
 
 		# Set select columns => select_column0
-		cols = load_col(Username, Feature)
-		select_column0.layout.visibility = 'hidden' if PlotType=='XY path' or PlotType.startswith('display') else 'visible'
-		select_column0.options = cols = [c for c in cols if c not in ['timestamp', 'datetime']]
-		select_column0.value = SelCol = SelCol if SelCol in cols else ('value' if 'value' in cols else cols[0])
-		select_durCol0.options = list(select_durCol0.options[:2])+cols
-		sort_column.options = ['no sort'] + cols
+		if Feature is not None:
+			cols = load_col(Username, Feature)
+			select_column0.layout.visibility = 'hidden' if PlotType=='XY path' or PlotType.startswith('display') else 'visible'
+			select_column0.options = cols = [c for c in cols if c not in ['timestamp', 'datetime']]
+			select_column0.value = SelCol = SelCol if SelCol in cols else ('value' if 'value' in cols else cols[0])
+			select_durCol0.options = list(select_durCol0.options[:2])+cols
+			sort_column.options = ['no sort'] + cols
+
 		if SortByCol not in sort_column.options:
 			SortByCol = sort_column.options[0]
 
@@ -528,7 +529,7 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 		if post_processor is not None:
 			data, labels, figsize = post_processor(data, labels, figsize)
 		if 'bar' in PlotType:
-			xy_plot = data.plot.bar(figsize=None if ax else figsize, rot=45, ax=ax)
+			xy_plot = data.plot.bar(figsize=None if ax else figsize, rot=45, ax=ax, **plot_options)
 		elif 'scatter' in PlotType:
 			data['tms'] = data.index.astype(int)
 			if CyclePeriod:
@@ -548,8 +549,8 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 			xy_plot.legend(loc='center left', prop={'size': 10}, bbox_to_anchor=(1,0,0.2,1))
 	elif PlotType == 'value heatmap':
 		fig, ax = plt.subplots(figsize=[v*0.8 for v in figsize])
-		data['day_of_week'] = data.index.dayofweek
-		data['hour'] = data.index.hour
+		data.loc[:,'day_of_week'] = data.index.dayofweek
+		data.loc[:,'hour'] = data.index.hour
 		piv = pd.pivot_table(data, values=SelCol, index='hour', columns='day_of_week', fill_value=0, aggfunc=eval('np.'+Extra))
 		xy_plot = sns.heatmap(piv, annot=True, cmap="plasma", fmt='.5g', linewidths=1, xticklabels=daysofweek)
 		xy_plot.invert_yaxis()
