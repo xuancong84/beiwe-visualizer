@@ -16,6 +16,7 @@ import ipywidgets as widgets
 from IPython.display import clear_output, display, HTML, Javascript
 from termcolor import colored
 from collections import *
+from matplotlib import cm
 
 
 # disable the annoying cell scrolling (browser scroll is enough)
@@ -147,6 +148,18 @@ def load_df(user, feature):
 
 	df_all[key] = df
 	return df
+
+def filter_by_date(df, StartDate=None, LastDate=None, DateOffset=0, details=None):
+	earliest_date, latest_date = df.index.min().to_pydatetime(), df.index.max().to_pydatetime()
+	start_date = earliest_date if StartDate == None else date2datetime(StartDate)
+	end_date = latest_date if LastDate == None else date2datetime(LastDate) + timedelta(days=1)
+	if DateOffset != 0:
+		dateoffset = timedelta(days=1) * DateOffset
+		start_date += dateoffset
+		end_date += dateoffset
+	if details is not None:
+		details.start_date, details.end_date = start_date, end_date
+	return df[(df.index >= start_date) & (df.index < end_date)]
 
 def load_fea(Username):
 	if isinstance(Username, pd.DataFrame): return [None]
@@ -343,7 +356,7 @@ feature_list0 = Dropdown(options=load_fea(user_list[0]) if user_list else featur
 function_list0 = Dropdown(options=list(F1.keys()) + ['value range in each interval', 'pass through selected', 'pass through all'])
 intv_shift0 = FloatSlider(min=0, max=1, step=0.01, value=0, continuous_update=False, description='Interval Shift')
 cycle_period0 = IntSlider(min=0, max=100, step=1, value=0, continuous_update=False, description='Cycle (days)')
-dateoffset0 = widgets.BoundedFloatText(value=0, min=-10, max=10.0, step=1, description='Date Offset')
+dateoffset0 = widgets.BoundedFloatText(value=0, step=1, description='Date Offset')
 interval0 = Dropdown(options=['1min', '5min', '15min', '30min', '1H', '2H', '3H', '6H', '12H', '1D', '2D', '1W', '1M'], value='1D', description='Bin Interval')
 fig, axes, g_prevPlotType, g_lock = None, None, None, False
 def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Function, Interval, IntvShift, CyclePeriod, PlotType, SelCol, Extra, DurCol, ForwardFill,
@@ -368,7 +381,7 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 		if Feature is not None:
 			cols = load_col(Username, Feature)
 			select_column0.layout.visibility = 'hidden' if PlotType=='XY path' or PlotType.startswith('display') else 'visible'
-			select_column0.options = cols = [c for c in cols if c not in ['timestamp', 'datetime']]
+			select_column0.options = cols = [c for c in cols if c not in ['timestamp', 'datetime']]+[None]
 			select_column0.value = SelCol = SelCol if SelCol in cols else ('value' if 'value' in cols else cols[0])
 			select_durCol0.options = list(select_durCol0.options[:2])+cols
 			sort_column.options = ['no sort'] + cols
@@ -408,19 +421,8 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 	dfc = dfa.sort_values(SortByCol) if SortByCol!='no sort' else dfa.copy()
 	df = dfc = dfc.ffill() if ForwardFill else dfc
 	if StartDate!=None or LastDate!=None:
-		earliest_date, latest_date = df.index[0].to_pydatetime(), df.index[0].to_pydatetime()
-		start_date = earliest_date if StartDate==None else date2datetime(StartDate)
-		end_date = latest_date if LastDate==None else date2datetime(LastDate)+timedelta(days=1)
-		dateoffset0.max = (latest_date-earliest_date).days
-		dateoffset0.min = -dateoffset0.max
-		if DateOffset!=0:
-			dateoffset = timedelta(days=1)*DateOffset
-			start_date += dateoffset
-			end_date += dateoffset
-		df = df[(df.index>=start_date) & (df.index<end_date)]
-		print(colored('Specified Start Date: %.10s ; End Date: %.10s ;'%(start_date, end_date), 'red', attrs=['bold']), end=' ')
-	else:
-		dateoffset0.max = dateoffset0.min = dateoffset0.value = 0
+		df = filter_by_date(df, StartDate, LastDate, DateOffset, os)
+		print(colored('Specified Start Date: %.10s ; End Date: %.10s ;'%(os.start_date, os.end_date), 'red', attrs=['bold']), end=' ')
 
 	# Warn and return if empty
 	os.df = df
@@ -461,18 +463,23 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 		display(HTML('<font color=red>Warning: processed data is empty</font>'))
 		return
 	if PlotType.startswith('time chart stacked'):
-		data0 = data.filter(lambda t:True) if 'DataFrameGroupBy' in str(type(data)) else data
-		stats = agg_fn(data0, SelCol)
-		N_cls_present = stats.size
-		N_cls = min(Extra, N_cls_present)
-		selected_cls = stats.index.tolist()[:N_cls]
-		if N_cls_present > N_cls:
-			data0[SelCol] = data0[SelCol].apply(lambda t:t if t in selected_cls else '<Others>')
-			selected_cls += ['<Others>']
-			N_cls += 1
-		data = data0.groupby(pd.Grouper(freq=Interval, base=IntvShift))
-		map_null = lambda t:t if len(t) else {selected_cls[0]:0}
-		data = pd.DataFrame.from_dict({g[0]:map_null(agg_fn(g[1],SelCol)) for g in data}, orient='index').fillna(0).sort_index()
+		if SelCol is None: SelCol = list(data.columns)
+		if type(SelCol)==list:
+			selected_cls = SelCol
+			N_cls = len(selected_cls)
+		else:
+			data0 = data.filter(lambda t:True) if 'DataFrameGroupBy' in str(type(data)) else data
+			stats = agg_fn(data0, SelCol)
+			N_cls_present = stats.size
+			N_cls = min(Extra, N_cls_present)
+			selected_cls = stats.index.tolist()[:N_cls]
+			if N_cls_present > N_cls:
+				data0[SelCol] = data0[SelCol].apply(lambda t:t if t in selected_cls else '<Others>')
+				selected_cls += ['<Others>']
+				N_cls += 1
+			data = data0.groupby(pd.Grouper(freq=Interval, base=IntvShift))
+			map_null = lambda t:t if len(t) else {selected_cls[0]:0}
+			data = pd.DataFrame.from_dict({g[0]:map_null(agg_fn(g[1],SelCol)) for g in data}, orient='index').fillna(0).sort_index()
 		if TakeLog: data = stacked_log(data)
 		figsize, xticks, labels = calc_figsize_xticks(data, scale)
 		if post_processor is not None:
@@ -606,7 +613,7 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 		# execute custom SubplotAxes options
 		for k,v in kwargs.items():
 			try:
-				exec("xy_plot.%s('%s')" % (k, v))
+				eval("xy_plot.%s"%k)(v)
 			except:
 				traceback.print_exc()
 		return xy_plot
