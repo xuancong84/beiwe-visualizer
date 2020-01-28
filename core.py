@@ -123,7 +123,7 @@ def load_csv(fn, repair=False, **kwargs):
 		print('CSV content after processing:\n%s'%txt)
 		return pd.DataFrame()
 
-def load_df(user, feature):
+def load_df(user, feature, verbose=1):
 	if isinstance(user, pd.DataFrame): return user
 	if not user:
 		df = pd.concat([parse_csv(L, error_bad_lines=True) for L in manual_file_data.values()]) \
@@ -131,10 +131,12 @@ def load_df(user, feature):
 
 	key = user + ' : ' + feature
 	if key in df_all:
-		print('Loading data from cache ... [Username=%s, Feature=%s]'%(user, feature), flush=True)
+		if verbose:
+			print('Loading data from cache ... [Username=%s, Feature=%s]'%(user, feature), flush=True)
 		return df_all[key]
 
-	print('Loading data from files ... [Username=%s, Feature=%s]'%(user, feature), flush=True)
+	if verbose:
+		print('Loading data from files ... [Username=%s, Feature=%s]'%(user, feature), flush=True)
 	fea_path = os.path.join(data_path, user_map(user), feature)
 	if os.path.isfile(fea_path):
 		df = load_csv(fea_path, error_bad_lines=True)
@@ -304,8 +306,8 @@ def add_cycle_mean(df, Interval, cycle_in_days, SelCol=True):
 	return ret[ret.columns[::-1]]
 
 def FFT(data, labels, figsize):
-	tms_delta = abs(data.index[1]-data.index[0])
-	ret = pd.DataFrame(abs(np.fft.fft(data.fillna(0), axis=0)), columns=data.columns, index=[tms_delta*(i+1) for i in range(len(data))])
+	tms_total = abs(data.index.max()-data.index.min())
+	ret = pd.DataFrame(abs(np.fft.fft(data.fillna(0), axis=0)), columns=data.columns, index=[(tms_total/i if i else np.inf) for i in range(len(data))])
 	return ret, ret.index, figsize
 
 def calc_bar_width_posi(N):
@@ -360,10 +362,10 @@ dateoffset0 = widgets.BoundedFloatText(value=0, step=1, description='Date Offset
 interval0 = Dropdown(options=['1min', '5min', '15min', '30min', '1H', '2H', '3H', '6H', '12H', '1D', '2D', '1W', '1M'], value='1D', description='Bin Interval')
 fig, axes, g_prevPlotType, g_lock = None, None, None, False
 def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Function, Interval, IntvShift, CyclePeriod, PlotType, SelCol, Extra, DurCol, ForwardFill,
-		   SortByCol, TakeLog, TakeFFT, DrawArrow, SpreadXYaxis, DoPlot, size_ratio=1, post_processor=None, ax=None, plot_options={}, **kwargs):
+		   SortByCol, TakeLog, TakeFFT, DrawArrow, SpreadXYaxis, DoPlot, verbose=1, size_ratio=1, post_processor=None, ax=None, plot_options={}, **kwargs):
 	global fig, axes, g_prevPlotType
 
-	if DoPlot!=None and not isinstance(Username, pd.DataFrame):
+	if DoPlot!=None and not isinstance(Username, pd.DataFrame) and verbose:
 		print([Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Function, Interval, IntvShift, CyclePeriod,
 			   PlotType, SelCol, Extra, DurCol, ForwardFill, SortByCol, TakeLog, TakeFFT, DrawArrow, SpreadXYaxis, DoPlot])
 
@@ -416,13 +418,14 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 		display(HTML('<font color=red>Warning: the whole data is empty</font>'))
 		return
 
-	if DoPlot is not None:
+	if DoPlot is not None and verbose:
 		print('Processing data ...', flush=True)
 	dfc = dfa.sort_values(SortByCol) if SortByCol!='no sort' else dfa.copy()
 	df = dfc = dfc.ffill() if ForwardFill else dfc
 	if StartDate!=None or LastDate!=None:
 		df = filter_by_date(df, StartDate, LastDate, DateOffset, os)
-		print(colored('Specified Start Date: %.10s ; End Date: %.10s ;'%(os.start_date, os.end_date), 'red', attrs=['bold']), end=' ')
+		if verbose:
+			print(colored('Specified Start Date: %.10s ; End Date: %.10s ;'%(os.start_date, os.end_date), 'red', attrs=['bold']), end=' ')
 
 	# Warn and return if empty
 	os.df = df
@@ -430,7 +433,7 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 		display(HTML('<font color=red>Warning: selected data is empty</font>'))
 		return
 
-	if 'DatetimeIndex' in str(type(df.index)):
+	if 'DatetimeIndex' in str(type(df.index)) and verbose:
 		print(colored('Data Start Date: %s ; End Date: %s'%(df.index[0].to_pydatetime(), df.index[-1].to_pydatetime()), 'red', attrs=['bold']))
 
 	scale = (0.9 if matplotlib.get_backend()=='nbAgg' else 1.0)*size_ratio
@@ -582,7 +585,8 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 			sel_classes['<Others>'] = data[N_classes:].sum()
 		data = sel_classes[::-1]
 		N_cls_total = len(data)
-		print('Total number of categories (including [other]) = %d'%N_cls_total)
+		if verbose:
+			print('Total number of categories (including [other]) = %d'%N_cls_total)
 		if 'pie' in PlotType:
 			fig_sz = np.clip(N_cls_total,8,24)
 			xy_plot = data.plot.pie(figsize=[fig_sz,fig_sz], title='[%s]'%SelCol, colors=generate_colormap(N_cls_total))
@@ -598,7 +602,7 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 	else:
 		xy_plot = data.plot()
 
-	if DoPlot is not None:
+	if DoPlot is not None and verbose:
 		print('Loading finished! Plotting ...', flush=True)
 	if 'xy_plot' in locals():
 		# set Sunday xlabels to red
