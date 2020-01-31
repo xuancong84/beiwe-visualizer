@@ -131,17 +131,23 @@ def load_df(user, feature, verbose=1):
 
 	key = user + ' : ' + feature
 	if key in df_all:
-		if verbose:
+		if verbose>0:
 			print('Loading data from cache ... [Username=%s, Feature=%s]'%(user, feature), flush=True)
 		return df_all[key]
 
-	if verbose:
+	if verbose>0:
 		print('Loading data from files ... [Username=%s, Feature=%s]'%(user, feature), flush=True)
 	fea_path = os.path.join(data_path, user_map(user), feature)
 	if os.path.isfile(fea_path):
 		df = load_csv(fea_path, error_bad_lines=True)
 	else:
-		df = pd.concat([load_csv(fn, error_bad_lines=True) for fn in sorted(glob(fea_path+'/*.csv'))])
+		fns = sorted(glob(fea_path+'/*.csv'))
+		if fns:
+			df = pd.concat([load_csv(fn, error_bad_lines=True) for fn in fns])
+		else:
+			if verbose>-1:
+				display('Warning: %s is empty or does not exist!'%fea_path)
+			df = pd.DataFrame()
 
 	if 'timestamp' in df.columns:
 		dt = pd.to_datetime(df['timestamp'], unit='ms', origin='unix', utc=True)
@@ -152,6 +158,7 @@ def load_df(user, feature, verbose=1):
 	return df
 
 def filter_by_date(df, StartDate=None, LastDate=None, DateOffset=0, details=None):
+	if len(df)==0: return df
 	earliest_date, latest_date = df.index.min().to_pydatetime(), df.index.max().to_pydatetime()
 	start_date = earliest_date if StartDate == None else date2datetime(StartDate)
 	end_date = latest_date if LastDate == None else date2datetime(LastDate) + timedelta(days=1)
@@ -411,7 +418,7 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 		plt.switch_backend('module://ipykernel.pylab.backend_inline')
 
 	## Execute draw function
-	dfa = load_df(Username, Feature)
+	dfa = load_df(Username, Feature, verbose=verbose)
 	if DurCol=='<timestamp-diff>' and '<timestamp-diff>' not in dfa.columns and 'timestamp' in dfa.columns:
 		dfa['<timestamp-diff>'] = dfa['timestamp'].diff().iloc[1:].append(pd.Series(), ignore_index=True)
 	if len(dfa) == 0:
