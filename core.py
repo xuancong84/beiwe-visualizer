@@ -17,6 +17,7 @@ from IPython.display import clear_output, display, HTML, Javascript
 from termcolor import colored
 from collections import *
 from matplotlib import cm
+from matplotlib.patches import Patch
 
 
 # disable the annoying cell scrolling (browser scroll is enough)
