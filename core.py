@@ -40,7 +40,7 @@ sns.set_style('darkgrid')
 # initializations
 # Setup all paths and sources
 feature_list = ['accel', 'callLog', 'tapsLog', 'usage', 'accessibilityLog', 'gps', 'light', 'powerState', 'textsLog']
-manual_file_data = {}
+os.manual_file_data = {}
 study_name_map = defaultdict(lambda:{}, {
 	'GxXEPM08ZK0GS1gIaLe9YhEn' : {'Nikolas old ZTE':'16kbga47', 'Nikolas':'1s3g19f7', 'IMH1-Judy':'33kr56tx', 'IMH2-Amirah':'1tfan3jn',
 								  'Nikolas old Nokia':'8e3ukdwy', 'Praveen':'d35pt9m4', 'Faye':'drdlfo5c', 'Robert':'gqmrnhvv', 'Xuancong':'hcy9th57'},
@@ -53,7 +53,8 @@ study_name_map = defaultdict(lambda:{}, {
 
 # specify source folder directory
 main_path = os.main_path if hasattr(os, 'main_path') else os.path.dirname(os.path.abspath(__file__))+'/2.decrypted/'
-dropdown_studies = Dropdown(options=[d for d in os.listdir(main_path) if os.path.isdir(main_path+d)], description = 'Select Study')
+dropdown_studies = Dropdown(options=[(d,d) for d in os.listdir(main_path) if os.path.isdir(main_path+d)]
+									+[('<manually selected files>',None)], description = 'Select Study')
 dropdown_userlist = Dropdown(options=[])
 def on_change_study(changes):
 	global data_path, user_map0, user_map1, user_map, user_list, df_all, cols_all
@@ -74,13 +75,12 @@ dropdown_studies.observe(on_change_study, names='value')
 
 fileupload = FileUpload(accept='*', multiple=True, layout=Layout(width='300px'), description='Manually Select Files')
 def on_change_files(changes):
-	global manual_file_data
-	manual_file_data = {fn:(gzip.decompress(dct['content']) if fn.endswith('.gz') else dct['content']) for fn,dct in changes['new'].items()}
+	os.manual_file_data = {fn:(gzip.decompress(dct['content']) if fn.endswith('.gz') else dct['content']) for fn,dct in changes['new'].items()}
 	dropdown_studies.value = None
 	on_change_study({'new':None}) if dropdown_studies.value is None else None
 fileupload.observe(on_change_files, names='value')
 
-on_change_study({'new':dropdown_studies.options[0]}) if dropdown_studies.options else None
+on_change_study({'new':dropdown_studies.options[0][1]})
 
 
 
@@ -126,36 +126,38 @@ def load_csv(fn, repair=False, **kwargs):
 
 def load_df(user, feature, verbose=1):
 	if isinstance(user, pd.DataFrame): return user
-	if not user:
-		df = pd.concat([parse_csv(L, error_bad_lines=True) for L in manual_file_data.values()]) \
-			if feature.startswith('<all ') else parse_csv(manual_file_data[feature], error_bad_lines=True)
+	if user:
+		key = user + ' : ' + feature
+		if key in df_all:
+			if verbose>0:
+				print('Loading data from cache ... [Username=%s, Feature=%s]'%(user, feature), flush=True)
+			return df_all[key]
 
-	key = user + ' : ' + feature
-	if key in df_all:
 		if verbose>0:
-			print('Loading data from cache ... [Username=%s, Feature=%s]'%(user, feature), flush=True)
-		return df_all[key]
-
-	if verbose>0:
-		print('Loading data from files ... [Username=%s, Feature=%s]'%(user, feature), flush=True)
-	fea_path = os.path.join(data_path, user_map(user), feature)
-	if os.path.isfile(fea_path):
-		df = load_csv(fea_path, error_bad_lines=True)
-	else:
-		fns = sorted(glob(fea_path+'/*.csv'))
-		if fns:
-			df = pd.concat([load_csv(fn, error_bad_lines=True) for fn in fns])
+			print('Loading data from files ... [Username=%s, Feature=%s]'%(user, feature), flush=True)
+		fea_path = os.path.join(data_path, user_map(user), feature)
+		if os.path.isfile(fea_path):
+			df = load_csv(fea_path, error_bad_lines=True)
 		else:
-			if verbose>-1:
-				display('Warning: %s is empty or does not exist!'%fea_path)
-			df = pd.DataFrame()
+			fns = sorted(glob(fea_path+'/*.csv'))
+			if fns:
+				df = pd.concat([load_csv(fn, error_bad_lines=True) for fn in fns])
+			else:
+				if verbose>-1:
+					display('Warning: %s is empty or does not exist!'%fea_path)
+				df = pd.DataFrame()
+	else:
+		df = pd.concat([parse_csv(L, error_bad_lines=True) for L in os.manual_file_data.values()]) \
+			if feature.startswith('<all ') else parse_csv(os.manual_file_data[feature], error_bad_lines=True)
 
 	if 'timestamp' in df.columns:
 		dt = pd.to_datetime(df['timestamp'], unit='ms', origin='unix', utc=True)
 		df['datetime'] = pd.DatetimeIndex(dt).tz_convert(tzlocal())
 		df = df.set_index('datetime', drop=True)
 
-	df_all[key] = df
+	if 'key' in locals():
+		df_all[key] = df
+
 	return df
 
 def filter_by_date(df, StartDate=None, LastDate=None, DateOffset=0, details=None):
@@ -174,7 +176,7 @@ def filter_by_date(df, StartDate=None, LastDate=None, DateOffset=0, details=None
 def load_fea(Username):
 	if isinstance(Username, pd.DataFrame): return [None]
 	if not Username:
-		return list(manual_file_data.keys()) + ['<all %d files>'%len(manual_file_data)]
+		return list(os.manual_file_data.keys()) + ['<all %d files>'%len(os.manual_file_data)]
 	user_path = data_path+'/'+user_map(Username)
 	return [fn for fn in sorted(os.listdir(user_path)) if (os.path.isdir(user_path+'/'+fn) or fn.endswith(".csv.gz") or fn.endswith(".csv"))]
 
@@ -183,7 +185,7 @@ def load_col(user, feature):
 	if feature in cols_all: return cols_all[feature]
 	if feature is None: return [None]
 	if not user:
-		df = parse_csv(manual_file_data[feature] if feature in manual_file_data else list(manual_file_data.values())[0], error_bad_lines=False)
+		df = parse_csv(os.manual_file_data[feature] if feature in os.manual_file_data else list(os.manual_file_data.values())[0], error_bad_lines=False)
 	else:
 		fea_path = os.path.join(data_path, user_map(user), feature)
 		df = load_csv(glob(dir_path+'/*.csv')[0] if os.path.isdir(fea_path) else fea_path, error_bad_lines=False)
