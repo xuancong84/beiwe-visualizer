@@ -28,11 +28,15 @@ def group_dates(data, labels, figsize):
 
 
 if __name__ == '__main__':
+	# 1.
 	# draw('moht.dsth.150@moht.com.sg_e3fb5e097f2b', None, None, 0.0, False, 'heart.csv.gz', 'grouped values by each interval', '1D', 0.0, 21,
 	# 	 'time chart grouped box plot', 'HR', 'mean', '<entry-count>', False, 'no sort', False, False, False, False, True)
 
-	# init parameters
-	plt.switch_backend('nbAgg')
+	# 2.
+	# draw('moht.dsth.150@moht.com.sg_e3fb5e097f2b', None, None, 0.0, False, 'light.csv.gz', '# of readings in each interval', '1D', 0.0, 0,
+	# 	 'time chart (bar)', 'value', 'mean', '<entry-count>', False, 'no sort', False, False, False, False, True)
+
+	# 3.
 	os.DateGroup = '30,7,7'
 	PP = group_dates
 	Username = 'moht.dsth.150@moht.com.sg_e3fb5e097f2b'
@@ -40,7 +44,6 @@ if __name__ == '__main__':
 	file_suffix = '.csv.gz'
 
 	# arrange into horizontal grid
-	plt.switch_backend('nbAgg')
 	fig, axs = plt.subplots(nrows=1, ncols=3, figsize=[12, 4])
 
 	# debug plot code
@@ -63,7 +66,7 @@ if __name__ == '__main__':
 	# plot time-away-from-home together with RoG
 	os.plot3 = plot3 = draw(df, None, None, 0.0, False, None, 'mean value in each interval', '1D', 0, 0,
 	                        'time chart (bar)', 'TAFH', 10,
-	                        '<entry-count>', True, 'no sort', False, False, False, False, True, verbose=-1,
+	                        '<entry-count>', True, 'no sort', False, False, False, False, True, verbose=-1, ax=axs[0],
 	                        post_processor=PP, plot_options={'color': [cmap(v) for v in RoG]},
 	                        set_title='Mobility', set_ylabel='Daily Time Away From Home (hours)')
 	plot3.legend(handles=[Patch(color='green', label='>1km'), Patch(color='orange', label='100m-1km'),

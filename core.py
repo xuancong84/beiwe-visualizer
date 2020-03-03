@@ -135,7 +135,8 @@ def load_df(user, feature, verbose=1):
 
 		if verbose>0:
 			print('Loading data from files ... [Username=%s, Feature=%s]'%(user, feature), flush=True)
-		fea_path = os.path.join(data_path, user_map(user), feature)
+
+		fea_path = user if os.path.isfile(user) else os.path.join(data_path, user_map(user), feature)
 		if os.path.isfile(fea_path):
 			df = load_csv(fea_path, error_bad_lines=True)
 		else:
