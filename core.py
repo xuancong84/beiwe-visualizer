@@ -16,7 +16,7 @@ import ipywidgets as widgets
 from IPython.display import clear_output, display, HTML, Javascript
 from termcolor import colored
 from collections import *
-from matplotlib import cm
+from matplotlib import cm, colors
 from matplotlib.patches import Patch
 
 
@@ -67,7 +67,8 @@ def on_change_study(changes):
 		user_map0 = study_name_map[study]
 		user_map1 = {v:k for k,v in user_map0.items()}
 		user_map = lambda t:(user_map0[t] if t in user_map0 else t)
-		user_list = sorted([user_map1[t] for t in os.listdir(data_path) if t in user_map1])+sorted([t for t in os.listdir(data_path) if t not in user_map1])
+		user_list = [u for u in os.listdir(data_path) if os.path.isdir(data_path+'/'+u)]
+		user_list = sorted([user_map1[t] for t in user_list if t in user_map1])+sorted([t for t in user_list if t not in user_map1])
 		dropdown_userlist.options = user_list
 		dropdown_userlist.value = user_list[0] if user_list else None
 	df_all, cols_all = {}, {}
@@ -138,7 +139,7 @@ def load_df(user, feature, verbose=1):
 
 		fea_path = user if os.path.isfile(user) else os.path.join(data_path, user_map(user), feature)
 		if os.path.isfile(fea_path):
-			df = load_csv(fea_path, error_bad_lines=True)
+			df = load_csv(fea_path, error_bad_lines=True, low_memory=False)
 		else:
 			fns = sorted(glob(fea_path+'/*.csv'))
 			if fns:
