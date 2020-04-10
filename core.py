@@ -56,6 +56,7 @@ main_path = os.main_path if hasattr(os, 'main_path') else os.path.dirname(os.pat
 dropdown_studies = Dropdown(options=[(d,d) for d in os.listdir(main_path) if os.path.isdir(main_path+d)]
 									+[('<manually selected files>',None)], description = 'Select Study')
 dropdown_userlist = Dropdown(options=[])
+data_path, user_map0, user_map1, user_map, user_list, df_all, cols_all = '', {}, {}, {}, [], {}, {}
 def on_change_study(changes):
 	global data_path, user_map0, user_map1, user_map, user_list, df_all, cols_all
 	study = changes['new']
@@ -63,7 +64,7 @@ def on_change_study(changes):
 		dropdown_userlist.options = user_list = ['']
 		dropdown_userlist.value = ''
 	else:
-		data_path = main_path + study + '/'
+		os.data_path = data_path = main_path + study + '/'
 		user_map0 = study_name_map[study]
 		user_map1 = {v:k for k,v in user_map0.items()}
 		user_map = lambda t:(user_map0[t] if t in user_map0 else t)
