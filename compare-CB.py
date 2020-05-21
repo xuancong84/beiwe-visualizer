@@ -60,12 +60,15 @@ if __name__ == '__main__':
 	CB_boundary_gap = pd.to_timedelta(CB_boundary_gap)
 
 	all_data = pandas_load(input_file)
-	dfs = pd.concat([compare_stats(summarize(df)[0]) for p, df in all_data.items()])
-	df_compare = dfs.groupby(dfs.index).mean()
+	dfs = [summarize(df)[0] for p, df in all_data.items()]
+	dfs = [df for df in dfs if (df.index < CB_start_date - CB_boundary_gap).sum() and (df.index > CB_start_date + CB_boundary_gap).sum()]
+	df = pd.concat([compare_stats(df) for df in dfs])
+	df_compare = df.groupby(df.index).mean()
 	df_compare.to_csv(Open(output_file, 'w'))
 
 	if save_shap:
-		df = pd.concat([summarize(df)[0] for p, df in all_data.items()])
+		dfs = [summarize(df)[0] for p, df in all_data.items()]
+		df = pd.concat([df for df in dfs if (df.index < CB_start_date - CB_boundary_gap).sum() and (df.index > CB_start_date + CB_boundary_gap).sum()])
 		df_before = df[df.index < CB_start_date - CB_boundary_gap]
 		df_after = df[df.index > CB_start_date + CB_boundary_gap]
 		X = pd.concat([df_before, df_after])
