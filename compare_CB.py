@@ -7,6 +7,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from collections import *
+from scipy.stats import ttest_ind
 from math import isnan, nan
 from matplotlib.widgets import Slider
 from glob import glob
@@ -18,7 +19,7 @@ import ipywidgets as widgets
 from pandas_serializer import *
 
 
-def perm_test(pop1, pop2, n_perm=1000):
+def p_test(pop1, pop2, n_perm=10000):
 	"""
 	Run a permutation test. Null hypothesis is that pop1 and pop2 have the same means. Returns p-value.
 
@@ -27,6 +28,7 @@ def perm_test(pop1, pop2, n_perm=1000):
 	:param n_perm: The number of permutations.
 	:return:
 	"""
+	pop1, pop2 = pop1[pop1.notna()].to_numpy(), pop2[pop2.notna()].to_numpy()
 	n1_ = len(pop1)
 	true_diff = np.abs(np.mean(pop1) - np.mean(pop2))
 	all_ = np.concatenate([pop1, pop2])
@@ -39,13 +41,18 @@ def perm_test(pop1, pop2, n_perm=1000):
 	return pval / n_perm
 
 
+def t_test(pop1, pop2):
+	pop1, pop2 = pop1[pop1.notna()].to_numpy(), pop2[pop2.notna()].to_numpy()
+	return ttest_ind(pop1, pop2).pvalue
+
+
 def get_stats(df, funcs=['max']):
 	return [eval('df.%s()' % f) for f in funcs]
 
 
-def compare_stats(df):
-	df_before = df[df.index < os.CB_start_date - os.CB_boundary_gap]
-	df_after = df[df.index > os.CB_start_date + os.CB_boundary_gap]
+def compare_stats(df, CB_start_date, CB_boundary_gap, CB_boundary_end):
+	df_before = df[(df.index < CB_start_date - CB_boundary_gap) & (df.index > CB_start_date - CB_boundary_end)]
+	df_after = df[(df.index > CB_start_date + CB_boundary_gap) & (df.index < CB_start_date + CB_boundary_end)]
 	return pd.DataFrame({'before_mean': df_before.mean(), 'after_mean': df_after.mean(),
 	                     'before_std': df_before.std(), 'after_std': df_after.std(),
 	                     'before_max': df_before.max(), 'after_max': df_after.max(),
@@ -64,21 +71,29 @@ def summarize(df):
 	return ret, col_groups
 
 
-def get_compare(all_data):
+def get_compare(all_data, CB_start_date, CB_boundary_gap, CB_boundary_end):
 	dfs = [summarize(df)[0] for p, df in all_data.items()]
-	dfs = [df for df in dfs if
-	       (df.index < os.CB_start_date - os.CB_boundary_gap).sum() and (df.index > os.CB_start_date + os.CB_boundary_gap).sum()]
-	df = pd.concat([compare_stats(df) for df in dfs])
+	dfs = [df for df in dfs if ((df.index < CB_start_date - CB_boundary_gap)&(df.index > CB_start_date - CB_boundary_end)).sum()
+	       and ((df.index > CB_start_date + CB_boundary_gap)&(df.index < CB_start_date + CB_boundary_end)).sum()]
+	df = pd.concat([compare_stats(df, CB_start_date, CB_boundary_gap, CB_boundary_end) for df in dfs])
 	df_compare = df.groupby(df.index).mean()
-	return df_compare
+	df = pd.concat(dfs)
+	df_before = df[(df.index < CB_start_date - CB_boundary_gap) & (df.index > CB_start_date - CB_boundary_end)]
+	df_after = df[(df.index > CB_start_date + CB_boundary_gap) & (df.index < CB_start_date + CB_boundary_end)]
+	for col in df.columns:
+		df_compare.loc[col, 'p-test'] = p_test(df_before[col], df_after[col])
+		df_compare.loc[col, 't-test'] = t_test(df_before[col], df_after[col])
+	cols = list(df_compare.columns)
+	ret = df_compare[cols[:2]+cols[-2:]+cols[2:-2]]
+	return ret
 
 
-def get_shap(all_data):
+def get_shap(all_data, CB_start_date, CB_boundary_gap, CB_boundary_end):
 	dfs = [summarize(df)[0] for p, df in all_data.items()]
-	df = pd.concat([df for df in dfs if (df.index < os.CB_start_date - os.CB_boundary_gap).sum() and (
-				df.index > os.CB_start_date + os.CB_boundary_gap).sum()])
-	df_before = df[df.index < os.CB_start_date - os.CB_boundary_gap]
-	df_after = df[df.index > os.CB_start_date + os.CB_boundary_gap]
+	df = pd.concat([df for df in dfs if ((df.index < CB_start_date - CB_boundary_gap)&(df.index > CB_start_date - CB_boundary_end)).sum()
+	       and ((df.index > CB_start_date + CB_boundary_gap)&(df.index < CB_start_date + CB_boundary_end)).sum()])
+	df_before = df[(df.index < CB_start_date - CB_boundary_gap) & (df.index > CB_start_date - CB_boundary_end)]
+	df_after = df[(df.index > CB_start_date + CB_boundary_gap) & (df.index < CB_start_date + CB_boundary_end)]
 	X = pd.concat([df_before, df_after])
 	Y = pd.Series([-1] * len(df_before.index) + [1] * len(df_after.index))
 
@@ -108,17 +123,19 @@ if __name__ == '__main__':
 	parser.add_argument('--output-file', '-o', help='output file, default="-" (STDOUT)', type=str, default='-')
 	parser.add_argument('--CB-start-date', '-d', help='date when circuit breaker occurred', type=str, default='2020-04-07')
 	parser.add_argument('--CB-boundary-gap', '-g', help='gap in days before and after CB-start-date', type=str, default='7D')
+	parser.add_argument('--CB-boundary-gap', '-e', help='maximum number of days before and after CB-start-date', type=str, default='1Y')
 	parser.add_argument('--save-shap', '-s', help='save Shap plot to file', type=str, default='')
 	opt = parser.parse_args()
 	globals().update(vars(opt))
 
-	os.CB_start_date = pd.Timestamp(CB_start_date, tz='tzlocal()')
-	os.CB_boundary_gap = pd.to_timedelta(CB_boundary_gap)
+	CB_start_date = pd.Timestamp(CB_start_date, tz='tzlocal()')
+	CB_boundary_gap = pd.to_timedelta(CB_boundary_gap)
+	CB_boundary_end = pd.to_timedelta(CB_boundary_end)
 
 	all_data = pandas_load(input_file)
 
-	get_compare(all_data).to_csv(Open(output_file, 'w'))
+	get_compare(all_data, CB_start_date, CB_boundary_gap, CB_boundary_end).to_csv(Open(output_file, 'w'))
 
 	if save_shap:
-		f, shap_values, X = get_shap(all_data)
+		f, shap_values, X = get_shap(all_data, CB_start_date, CB_boundary_gap, CB_boundary_end)
 		f.savefig(save_shap, bbox_inches='tight', dpi=900)
