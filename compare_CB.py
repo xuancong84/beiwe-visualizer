@@ -88,7 +88,7 @@ def get_compare(all_data, CB_start_date, CB_boundary_gap, CB_boundary_end):
 	return ret
 
 
-def get_shap(all_data, CB_start_date, CB_boundary_gap, CB_boundary_end):
+def get_shap(all_data, CB_start_date, CB_boundary_gap, CB_boundary_end, figwidth=0, **kwargs):
 	dfs = [summarize(df)[0] for p, df in all_data.items()]
 	df = pd.concat([df for df in dfs if ((df.index < CB_start_date - CB_boundary_gap)&(df.index > CB_start_date - CB_boundary_end)).sum()
 	       and ((df.index > CB_start_date + CB_boundary_gap)&(df.index < CB_start_date + CB_boundary_end)).sum()])
@@ -110,7 +110,7 @@ def get_shap(all_data, CB_start_date, CB_boundary_gap, CB_boundary_end):
 
 	shap_values = shap.TreeExplainer(model).shap_values(X)
 	f = plt.figure()
-	shap.summary_plot(shap_values, X, max_display=9999)
+	shap.summary_plot(shap_values, X, plot_size=[figwidth, figwidth*X.shape[1]/40] if figwidth else 'auto', **kwargs)
 	return f, shap_values, X
 
 
@@ -123,8 +123,11 @@ if __name__ == '__main__':
 	parser.add_argument('--output-file', '-o', help='output file, default="-" (STDOUT)', type=str, default='-')
 	parser.add_argument('--CB-start-date', '-d', help='date when circuit breaker occurred', type=str, default='2020-04-07')
 	parser.add_argument('--CB-boundary-gap', '-g', help='gap in days before and after CB-start-date', type=str, default='7D')
-	parser.add_argument('--CB-boundary-gap', '-e', help='maximum number of days before and after CB-start-date', type=str, default='1Y')
+	parser.add_argument('--CB-boundary-end', '-e', help='maximum number of days before and after CB-start-date', type=str, default='1Y')
 	parser.add_argument('--save-shap', '-s', help='save Shap plot to file', type=str, default='')
+	parser.add_argument('--shap-width', '-w', help='width of Shap plot, default=0: auto', type=int, default=0)
+	parser.add_argument('--dpi', '-dpi', help='save figure dpi', type=int, default=900)
+	parser.add_argument('--max-display', '-N', help='max number of features in Shap plot', type=int, default=9999)
 	opt = parser.parse_args()
 	globals().update(vars(opt))
 
@@ -137,5 +140,5 @@ if __name__ == '__main__':
 	get_compare(all_data, CB_start_date, CB_boundary_gap, CB_boundary_end).to_csv(Open(output_file, 'w'))
 
 	if save_shap:
-		f, shap_values, X = get_shap(all_data, CB_start_date, CB_boundary_gap, CB_boundary_end)
-		f.savefig(save_shap, bbox_inches='tight', dpi=900)
+		f, shap_values, X = get_shap(all_data, CB_start_date, CB_boundary_gap, CB_boundary_end, figwidth=shap_width, max_display=max_display)
+		f.savefig(save_shap, bbox_inches='tight', dpi=dpi)
