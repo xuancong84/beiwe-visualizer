@@ -7,7 +7,8 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from collections import *
-from scipy.stats import ttest_ind
+import scipy
+import statsmodels.stats.api as sms
 from math import isnan, nan
 from matplotlib.widgets import Slider
 from glob import glob
@@ -38,12 +39,24 @@ def p_test(pop1, pop2, n_perm=10000):
 		samp1, samp2 = all_[:n1_], all_[n1_:]
 		samp_diff = np.abs(samp1.mean() - samp2.mean())
 		pval += int(samp_diff >= true_diff)
-	return pval / n_perm
+	return '%.5f'%(pval/n_perm)
 
 
 def t_test(pop1, pop2):
 	pop1, pop2 = pop1[pop1.notna()].to_numpy(), pop2[pop2.notna()].to_numpy()
-	return ttest_ind(pop1, pop2).pvalue
+	return '%.5f'%(scipy.stats.ttest_ind(pop1, pop2).pvalue)
+
+
+def ttest_rel(X1, X2):
+	return '%.5f'%scipy.stats.ttest_rel(X1, X2)[1]
+
+def wilcoxon(X1, X2):
+	return '%.5f'%scipy.stats.wilcoxon(X1, X2)[1]
+
+def CI_ttest(X1, X2):
+	cm = sms.CompareMeans(sms.DescrStatsW(X1), sms.DescrStatsW(X2))
+	out = cm.tconfint_diff(usevar='unequal')
+	return '[%.2f, %.2f]'%(out[0], out[1])
 
 
 def get_stats(df, funcs=['max']):
@@ -75,16 +88,19 @@ def get_compare(all_data, CB_start_date, CB_boundary_gap, CB_boundary_end):
 	dfs = [summarize(df)[0] for p, df in all_data.items()]
 	dfs = [df for df in dfs if ((df.index < CB_start_date - CB_boundary_gap)&(df.index > CB_start_date - CB_boundary_end)).sum()
 	       and ((df.index > CB_start_date + CB_boundary_gap)&(df.index < CB_start_date + CB_boundary_end)).sum()]
-	df = pd.concat([compare_stats(df, CB_start_date, CB_boundary_gap, CB_boundary_end) for df in dfs])
-	df_compare = df.groupby(df.index).mean()
+	DF = pd.concat([compare_stats(df, CB_start_date, CB_boundary_gap, CB_boundary_end) for df in dfs])
+	df_compare = DF.groupby(DF.index).mean()
 	df = pd.concat(dfs)
 	df_before = df[(df.index < CB_start_date - CB_boundary_gap) & (df.index > CB_start_date - CB_boundary_end)]
 	df_after = df[(df.index > CB_start_date + CB_boundary_gap) & (df.index < CB_start_date + CB_boundary_end)]
 	for col in df.columns:
+		for func in [ttest_rel, wilcoxon, CI_ttest]:
+			inp = DF.loc[col, ['before_mean', 'after_mean']].dropna()
+			df_compare.loc[col, func.__name__] = func(inp.iloc[:,0], inp.iloc[:,1]) + ' (%d)'%inp.shape[0]
 		df_compare.loc[col, 'p-test'] = p_test(df_before[col], df_after[col])
 		df_compare.loc[col, 't-test'] = t_test(df_before[col], df_after[col])
 	cols = list(df_compare.columns)
-	ret = df_compare[cols[:2]+cols[-2:]+cols[2:-2]]
+	ret = df_compare[cols[:2]+cols[-5:]+cols[2:-5]]
 	return ret
 
 
