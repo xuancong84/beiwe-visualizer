@@ -7,7 +7,6 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from collections import *
-from tqdm import tqdm
 import scipy
 import statsmodels.stats.api as sms
 from math import isnan, nan
@@ -17,6 +16,7 @@ from ipywidgets import *
 from datetime import datetime, timedelta
 from dateutil.tz import tzlocal
 import ipywidgets as widgets
+from tqdm import tqdm
 
 from pandas_serializer import *
 
@@ -64,14 +64,12 @@ def get_stats(df, funcs=['max']):
 	return [eval('df.%s()' % f) for f in funcs]
 
 
-def compare_stats(df, CB_start_date, CB_boundary_gap, CB_boundary_end):
-	df_before = df[(df.index < CB_start_date - CB_boundary_gap) & (df.index > CB_start_date - CB_boundary_end)]
-	df_after = df[(df.index > CB_start_date + CB_boundary_gap) & (df.index < CB_start_date + CB_boundary_end)]
-	return pd.DataFrame({'before_mean': df_before.mean(), 'after_mean': df_after.mean(),
-	                     'before_std': df_before.std(), 'after_std': df_after.std(),
-	                     'before_max': df_before.max(), 'after_max': df_after.max(),
-	                     'before_min': df_before.min(), 'after_min': df_after.min(),
-	                     'before_median': df_before.median(), 'after_median': df_after.median()})
+def compare_stats(df_negative, df_positive):
+	return pd.DataFrame({'neg_mean': df_negative.mean(), 'pos_mean': df_positive.mean(),
+	                     'neg_std': df_negative.std(), 'pos_std': df_positive.std(),
+	                     'neg_max': df_negative.max(), 'pos_max': df_positive.max(),
+	                     'neg_min': df_negative.min(), 'pos_min': df_positive.min(),
+	                     'neg_median': df_negative.median(), 'pos_median': df_positive.median()})
 
 
 def summarize(df):
@@ -85,32 +83,16 @@ def summarize(df):
 	return ret, col_groups
 
 
-def get_compare(all_data, CB_start_date, CB_boundary_gap, CB_boundary_end):
-	dfs = [summarize(df)[0] for p, df in all_data.items()]
-	dfs = [df for df in dfs if ((df.index < CB_start_date - CB_boundary_gap)&(df.index > CB_start_date - CB_boundary_end)).sum()
-	       and ((df.index > CB_start_date + CB_boundary_gap)&(df.index < CB_start_date + CB_boundary_end)).sum()]
-	DF = pd.concat([compare_stats(df, CB_start_date, CB_boundary_gap, CB_boundary_end) for df in dfs])
-	df_compare = DF.groupby(DF.index).mean()
-	df = pd.concat(dfs)
-	df_before = df[(df.index < CB_start_date - CB_boundary_gap) & (df.index > CB_start_date - CB_boundary_end)]
-	df_after = df[(df.index > CB_start_date + CB_boundary_gap) & (df.index < CB_start_date + CB_boundary_end)]
-	for col in tqdm(df.columns):
-		for func in [ttest_rel, wilcoxon, CI_ttest]:
-			inp = DF.loc[col, ['before_mean', 'after_mean']].dropna()
-			df_compare.loc[col, func.__name__] = func(inp.iloc[:,0], inp.iloc[:,1]) + ' (%d)'%inp.shape[0]
-		df_compare.loc[col, 'p-test'] = p_test(df_before[col], df_after[col])
-		df_compare.loc[col, 't-test'] = t_test(df_before[col], df_after[col])
-	cols = list(df_compare.columns)
-	ret = df_compare[cols[:2]+cols[-5:]+cols[2:-5]]
-	return ret
+def get_compare(neg, pos):
+	df_compare = compare_stats(neg, pos)
+	[df_compare.insert(2, col, nan) for col in ['t-test', 'p-test']]
+	for col in tqdm(pos.columns):
+		df_compare.loc[col, 'p-test'] = p_test(neg[col], pos[col])
+		df_compare.loc[col, 't-test'] = t_test(neg[col], pos[col])
+	return df_compare
 
 
-def get_shap(all_data, CB_start_date, CB_boundary_gap, CB_boundary_end, figwidth=0, **kwargs):
-	dfs = [summarize(df)[0] for p, df in all_data.items()]
-	df = pd.concat([df for df in dfs if ((df.index < CB_start_date - CB_boundary_gap)&(df.index > CB_start_date - CB_boundary_end)).sum()
-	       and ((df.index > CB_start_date + CB_boundary_gap)&(df.index < CB_start_date + CB_boundary_end)).sum()])
-	df_before = df[(df.index < CB_start_date - CB_boundary_gap) & (df.index > CB_start_date - CB_boundary_end)]
-	df_after = df[(df.index > CB_start_date + CB_boundary_gap) & (df.index < CB_start_date + CB_boundary_end)]
+def get_shap(df_before, df_after, figwidth=0, **kwargs):
 	X = pd.concat([df_before, df_after])
 	Y = pd.Series([-1] * len(df_before.index) + [1] * len(df_after.index))
 
@@ -131,16 +113,28 @@ def get_shap(all_data, CB_start_date, CB_boundary_gap, CB_boundary_end, figwidth
 	return f, shap_values, X
 
 
+def split_pos_neg(DP_data, drug_data, criterion):
+	pos, neg = [], []
+	n_pos, n_neg = [], []
+	for PID, df in DP_data.items():
+		try:
+			cls, n_cls = (pos, n_pos) if eval(criterion) else (neg, n_neg)
+			cls += [summarize(df)[0]]
+			n_cls += [PID]
+		except:
+			pass
+	print('POSITIVE class has %s, NEGATIVE class has %s'%(n_pos, n_neg), file=sys.stderr)
+	return pd.concat(pos), pd.concat(neg)
+
+
 ## MAIN
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(usage='$0 [options] <input 1>output 2>progress',
 	                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter,
 	                                 description='compare data before and after circuit breaker')
 	parser.add_argument('--input-file', '-i', help='input file, default="-" (STDIN)', type=str, default='-')
+	parser.add_argument('--drug-file', '-id', help='input drug file, default="-" (STDIN)', type=str, default='-')
 	parser.add_argument('--output-file', '-o', help='output file, default="-" (STDOUT)', type=str, default='-')
-	parser.add_argument('--CB-start-date', '-d', help='date when circuit breaker occurred', type=str, default='2020-04-07')
-	parser.add_argument('--CB-boundary-gap', '-g', help='gap in days before and after CB-start-date', type=str, default='7D')
-	parser.add_argument('--CB-boundary-end', '-e', help='maximum number of days before and after CB-start-date', type=str, default='1Y')
 	parser.add_argument('--save-shap', '-s', help='save Shap plot to file', type=str, default='')
 	parser.add_argument('--shap-width', '-w', help='width of Shap plot, default=0: auto', type=int, default=0)
 	parser.add_argument('--dpi', '-dpi', help='save figure dpi', type=int, default=900)
@@ -148,14 +142,16 @@ if __name__ == '__main__':
 	opt = parser.parse_args()
 	globals().update(vars(opt))
 
-	CB_start_date = pd.Timestamp(CB_start_date, tz='tzlocal()')
-	CB_boundary_gap = pd.to_timedelta(CB_boundary_gap)
-	CB_boundary_end = pd.to_timedelta(CB_boundary_end)
+	# load both DP and drug data, converting email ID to participant ID, e.g. S001
+	DP_data = {('S%s'%(k[10:13])):v for k,v in pandas_load(input_file).items()}
+	drug_data = pandas_load(drug_file)
 
-	all_data = pandas_load(input_file)
+	# split into positive and negative class
+	pos, neg = split_pos_neg(DP_data, drug_data, "8 in drug_data['drugs_antipsychotic']['antipsychotic_name_'][PID].values")
 
-	get_compare(all_data, CB_start_date, CB_boundary_gap, CB_boundary_end).to_csv(Open(output_file, 'w'))
+	# perform the comparison between the positive and negative class
+	get_compare(neg, pos).to_csv(Open(output_file, 'w'))
 
 	if save_shap:
-		f, shap_values, X = get_shap(all_data, CB_start_date, CB_boundary_gap, CB_boundary_end, figwidth=shap_width, max_display=max_display)
+		f, shap_values, X = get_shap(pos, neg, figwidth=shap_width, max_display=max_display)
 		f.savefig(save_shap, bbox_inches='tight', dpi=dpi)
