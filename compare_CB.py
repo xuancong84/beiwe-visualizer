@@ -64,9 +64,9 @@ def get_stats(df, funcs=['max']):
 	return [eval('df.%s()' % f) for f in funcs]
 
 
-def compare_stats(df, CB_start_date, CB_boundary_gap, CB_boundary_end):
-	df_before = df[(df.index < CB_start_date - CB_boundary_gap) & (df.index > CB_start_date - CB_boundary_end)]
-	df_after = df[(df.index > CB_start_date + CB_boundary_gap) & (df.index < CB_start_date + CB_boundary_end)]
+def compare_stats(df, DateRangeA, DateRangeB):
+	df_before = df[DateRangeA[0]:DateRangeA[1]]
+	df_after = df[DateRangeB[0]:DateRangeB[1]]
 	return pd.DataFrame({'before_mean': df_before.mean(), 'after_mean': df_after.mean(),
 	                     'before_std': df_before.std(), 'after_std': df_after.std(),
 	                     'before_max': df_before.max(), 'after_max': df_after.max(),
@@ -85,15 +85,14 @@ def summarize(df):
 	return ret, col_groups
 
 
-def get_compare(all_data, CB_start_date, CB_boundary_gap, CB_boundary_end):
+def get_compare(all_data, DateRangeA, DateRangeB):
 	dfs = [summarize(df)[0] for p, df in all_data.items()]
-	dfs = [df for df in dfs if ((df.index < CB_start_date - CB_boundary_gap)&(df.index > CB_start_date - CB_boundary_end)).sum()
-	       and ((df.index > CB_start_date + CB_boundary_gap)&(df.index < CB_start_date + CB_boundary_end)).sum()]
-	DF = pd.concat([compare_stats(df, CB_start_date, CB_boundary_gap, CB_boundary_end) for df in dfs])
+	dfs = [df for df in dfs if not df[DateRangeA[0]:DateRangeA[1]].empty and not df[DateRangeB[0]:DateRangeB[1]].empty]
+	DF = pd.concat([compare_stats(df, DateRangeA, DateRangeB) for df in dfs])
 	df_compare = DF.groupby(DF.index).mean()
 	df = pd.concat(dfs)
-	df_before = df[(df.index < CB_start_date - CB_boundary_gap) & (df.index > CB_start_date - CB_boundary_end)]
-	df_after = df[(df.index > CB_start_date + CB_boundary_gap) & (df.index < CB_start_date + CB_boundary_end)]
+	df_before = df[DateRangeA[0]:DateRangeA[1]]
+	df_after = df[DateRangeB[0]:DateRangeB[1]]
 	for col in tqdm(df.columns):
 		for func in [ttest_rel, wilcoxon, CI_ttest]:
 			inp = DF.loc[col, ['before_mean', 'after_mean']].dropna()
@@ -105,12 +104,11 @@ def get_compare(all_data, CB_start_date, CB_boundary_gap, CB_boundary_end):
 	return ret
 
 
-def get_shap(all_data, CB_start_date, CB_boundary_gap, CB_boundary_end, figwidth=0, **kwargs):
+def get_shap(all_data, DateRangeA, DateRangeB, figwidth=0, **kwargs):
 	dfs = [summarize(df)[0] for p, df in all_data.items()]
-	df = pd.concat([df for df in dfs if ((df.index < CB_start_date - CB_boundary_gap)&(df.index > CB_start_date - CB_boundary_end)).sum()
-	       and ((df.index > CB_start_date + CB_boundary_gap)&(df.index < CB_start_date + CB_boundary_end)).sum()])
-	df_before = df[(df.index < CB_start_date - CB_boundary_gap) & (df.index > CB_start_date - CB_boundary_end)]
-	df_after = df[(df.index > CB_start_date + CB_boundary_gap) & (df.index < CB_start_date + CB_boundary_end)]
+	df = pd.concat([df for df in dfs if not df[DateRangeA[0]:DateRangeA[1]].empty and not df[DateRangeB[0]:DateRangeB[1]].empty])
+	df_before = df[DateRangeA[0]:DateRangeA[1]]
+	df_after = df[DateRangeB[0]:DateRangeB[1]]
 	X = pd.concat([df_before, df_after])
 	Y = pd.Series([-1] * len(df_before.index) + [1] * len(df_after.index))
 
@@ -151,11 +149,13 @@ if __name__ == '__main__':
 	CB_start_date = pd.Timestamp(CB_start_date, tz='tzlocal()')
 	CB_boundary_gap = pd.to_timedelta(CB_boundary_gap)
 	CB_boundary_end = pd.to_timedelta(CB_boundary_end)
+	DateRangeA = [CB_start_date - CB_boundary_end, CB_start_date - CB_boundary_gap]
+	DateRangeB = [CB_start_date + CB_boundary_gap, CB_start_date + CB_boundary_end]
 
 	all_data = pandas_load(input_file)
 
-	get_compare(all_data, CB_start_date, CB_boundary_gap, CB_boundary_end).to_csv(Open(output_file, 'w'))
+	get_compare(all_data, DateRangeA, DateRangeB).to_csv(Open(output_file, 'w'))
 
 	if save_shap:
-		f, shap_values, X = get_shap(all_data, CB_start_date, CB_boundary_gap, CB_boundary_end, figwidth=shap_width, max_display=max_display)
+		f, shap_values, X = get_shap(all_data, DateRangeA, DateRangeB, figwidth=shap_width, max_display=max_display)
 		f.savefig(save_shap, bbox_inches='tight', dpi=dpi)
