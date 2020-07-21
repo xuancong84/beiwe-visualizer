@@ -86,6 +86,7 @@ def summarize(df):
 
 
 def get_compare(all_data, DateRangeA, DateRangeB):
+	DateRangeA, DateRangeB = [str(i) for i in DateRangeA], [str(i) for i in DateRangeB]
 	dfs = [summarize(df)[0] for p, df in all_data.items()]
 	dfs = [df for df in dfs if not df[DateRangeA[0]:DateRangeA[1]].empty and not df[DateRangeB[0]:DateRangeB[1]].empty]
 	DF = pd.concat([compare_stats(df, DateRangeA, DateRangeB) for df in dfs])
@@ -105,6 +106,7 @@ def get_compare(all_data, DateRangeA, DateRangeB):
 
 
 def get_shap(all_data, DateRangeA, DateRangeB, figwidth=0, **kwargs):
+	DateRangeA, DateRangeB = [str(i) for i in DateRangeA], [str(i) for i in DateRangeB]
 	dfs = [summarize(df)[0] for p, df in all_data.items()]
 	df = pd.concat([df for df in dfs if not df[DateRangeA[0]:DateRangeA[1]].empty and not df[DateRangeB[0]:DateRangeB[1]].empty])
 	df_before = df[DateRangeA[0]:DateRangeA[1]]
