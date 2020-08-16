@@ -241,7 +241,7 @@ def calc_figsize_xticks(data, scale=1, width_mul=1):
 	chart_width = min(MAX_CHART_WIDTH, len(data)*0.4*scale)
 	figsize = [chart_width*mul, 3*scale]
 	index = data.index if type(data)==pd.core.frame.DataFrame else [_[0] for _ in data]
-	min_value_interval = (index[-1] - index[0])*MAX_CHART_WIDTH/(chart_width*MAX_XTICK_LABELS)/mul
+	min_value_interval = (index[-1] - index[0])*(MAX_CHART_WIDTH/(chart_width*MAX_XTICK_LABELS)/mul)
 	xticks = [str(g) for g in index]
 	labels = [g for g in index]
 	for ii,t in enumerate(labels):
