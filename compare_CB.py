@@ -77,7 +77,7 @@ def compare_stats(df, DateRangeA, DateRangeB):
 def summarize(df):
 	col_groups = defaultdict(lambda: [])
 	for col in df.columns:
-		if re.search('_[0-9][0-9]h$', col):
+		if re.search('_\d\dh$', col):
 			col_groups[col[:-4]] += [col]
 	ret = df[[col for col in df.columns if col[:-4] not in col_groups]].copy()
 	for grp, cols in col_groups.items():
