@@ -90,6 +90,12 @@ on_change_study({'new':dropdown_studies.options[0][1]})
 def Open(fn, mode='r'):
 	return gzip.open(fn, mode) if fn.lower().endswith('.gz') else open(fn, mode)
 
+def Try(fn, otherwise):
+	try:
+		return fn()
+	except:
+		return otherwise
+
 def parse_csv(L, repair=False, **kwargs):
 	Ls = L.replace(b'\r', b' ').decode('utf8', 'ignore').splitlines()
 
