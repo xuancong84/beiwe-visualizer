@@ -132,7 +132,7 @@ def load_csv(fn, repair=False, **kwargs):
 		print('CSV content after processing:\n%s'%txt)
 		return pd.DataFrame()
 
-def load_df(user, feature, verbose=1):
+def load_df(user, feature, verbose=1, **kwargs):
 	if isinstance(user, pd.DataFrame): return user
 	if user:
 		key = user + ' : ' + feature
@@ -146,11 +146,11 @@ def load_df(user, feature, verbose=1):
 
 		fea_path = user if os.path.isfile(user) else os.path.join(data_path, user_map(user), feature)
 		if os.path.isfile(fea_path):
-			df = load_csv(fea_path, error_bad_lines=True, low_memory=False)
+			df = load_csv(fea_path, error_bad_lines=True, **kwargs)
 		else:
 			fns = sorted(glob(fea_path+'/*.csv'))
 			if fns:
-				df = pd.concat([load_csv(fn, error_bad_lines=True) for fn in fns])
+				df = pd.concat([load_csv(fn, error_bad_lines=True, **kwargs) for fn in fns])
 			else:
 				if verbose>-1:
 					display('Warning: %s is empty or does not exist!'%fea_path)
@@ -402,7 +402,7 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 		if Feature is not None:
 			cols = load_col(Username, Feature)
 			select_column0.layout.visibility = 'hidden' if PlotType=='XY path' or PlotType.startswith('display') else 'visible'
-			select_column0.options = cols = [c for c in cols if c not in ['timestamp', 'datetime']]+[None]
+			select_column0.options = cols = [c for c in cols if c not in ['timestamp', 'datetime']]+['<timestamp-diff>', None]
 			select_column0.value = SelCol = SelCol if SelCol in cols else ('value' if 'value' in cols else cols[0])
 			select_durCol0.options = list(select_durCol0.options[:2])+cols
 			sort_column.options = ['no sort'] + cols
@@ -431,7 +431,7 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 
 	## Execute draw function
 	dfa = load_df(Username, Feature, verbose=verbose)
-	if DurCol=='<timestamp-diff>' and '<timestamp-diff>' not in dfa.columns and 'timestamp' in dfa.columns:
+	if (SelCol=='<timestamp-diff>' or DurCol=='<timestamp-diff>') and '<timestamp-diff>' not in dfa.columns and 'timestamp' in dfa.columns:
 		dfa['<timestamp-diff>'] = dfa['timestamp'].diff().iloc[1:].append(pd.Series(), ignore_index=True)
 	if len(dfa) == 0:
 		display(HTML('<font color=red>Warning: the whole data is empty</font>'))
@@ -468,7 +468,7 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 	elif Function == 'value range in each interval':
 		data1 = df[[SelCol]].groupby(pd.Grouper(freq=Interval, base=IntvShift))
 		data = data1.min().rename(columns={SelCol:'min'})
-		data['max'] = data1.max()[SelCol]-data['min']
+		data['max'] = data1.max()[SelCol]
 	elif Function == 'pass through selected':
 		data = df[[SelCol]]
 	elif Function == 'pass through all':
