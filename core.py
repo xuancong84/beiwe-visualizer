@@ -197,15 +197,15 @@ def load_col(user, feature):
 		df = parse_csv(os.manual_file_data[feature] if feature in os.manual_file_data else list(os.manual_file_data.values())[0], error_bad_lines=False)
 	else:
 		fea_path = os.path.join(data_path, user_map(user), feature)
-		df = load_csv(glob(dir_path+'/*.csv')[0] if os.path.isdir(fea_path) else fea_path, error_bad_lines=False)
+		df = load_csv(glob(fea_path+'/*.csv')[0] if os.path.isdir(fea_path) else fea_path, error_bad_lines=False)
 	return list(df.columns)
 
-def draw_arrows(axes, df, TH=0.01):
+def draw_arrows(axes, df, TH=0.02):
 	data = df[['timestamp', 'longitude', 'latitude']]
 	_, x_span, y_span = data.max()-data.min()
 	th = np.sqrt(x_span**2+y_span**2)*TH
-	HW = np.sqrt(x_span**2+y_span**2)*.005
-	HL = np.sqrt(x_span**2+y_span**2)*.01
+	HW = np.sqrt(x_span**2+y_span**2)*.01
+	HL = np.sqrt(x_span**2+y_span**2)*.02
 	lx = ly = None
 	for r in data.itertuples():
 		x, y = r.longitude, r.latitude
