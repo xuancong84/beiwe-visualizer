@@ -26,9 +26,9 @@ display(Javascript(disable_js))
 
 # use full browser width
 display(HTML("<style>.container { width:100% !important; }</style>"))
-pd.options.display.width = 1000
-pd.options.display.max_columns = 1001
-pd.options.display.max_rows = 10000
+# pd.options.display.width = 1000
+# pd.options.display.max_columns = 1001
+# pd.options.display.max_rows = 10000
 MAX_CHART_WIDTH = 400
 MAX_XTICK_LABELS = 1200
 CYCLE_COLORS = ['red', 'green', 'blue', 'yellow', 'purple', 'pink', 'brown', 'black'] # this also controls the max number of cycles to display
@@ -53,7 +53,7 @@ study_name_map = defaultdict(lambda:{}, {
 
 # specify source folder directory
 main_path = os.main_path if hasattr(os, 'main_path') else os.path.dirname(os.path.abspath(__file__))+'/2.decrypted/'
-dropdown_studies = Dropdown(options=[(d,d) for d in os.listdir(main_path) if os.path.isdir(main_path+d)]
+dropdown_studies = Dropdown(options=([(d,d) for d in os.listdir(main_path) if os.path.isdir(main_path+d)] if os.path.exists(main_path) else [])
 									+[('<manually selected files>',None)], description = 'Select Study')
 dropdown_userlist = Dropdown(options=[])
 data_path, user_map0, user_map1, user_map, user_list, df_all, cols_all = '', {}, {}, {}, [], {}, {}

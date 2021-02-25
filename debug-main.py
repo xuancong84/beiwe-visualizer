@@ -5,6 +5,8 @@ os.main_path = os.getenv('HOME')+'/projects/beiwe-gitlab/beiwe-visualizer/3.decr
 
 from core import *
 import datetime
+from pandas_serializer import *
+from compare_CB import *
 
 
 def group_dates(data, labels, figsize):
@@ -27,6 +29,53 @@ def group_dates(data, labels, figsize):
 	return ret, ret_index, figsize
 
 
+def summarize(df):
+	col_groups = defaultdict(lambda: [])
+	for col in df.columns:
+		if re.search('_\d\dh$', col):
+			col_groups[col[:-4]] += [col]
+	ret = df[[col for col in df.columns if col[:-4] not in col_groups]].copy()
+	for grp, cols in col_groups.items():
+		ret[grp] = df[cols].mean(axis=1)
+	return ret, col_groups
+
+def compare_stats1(df, DateRangeA, DateRangeB):
+	df_before = df[DateRangeA[0]:DateRangeA[1]]
+	df_after = df[DateRangeB[0]:DateRangeB[1]]
+	return pd.DataFrame({'before': df_before.mean(), 'after': df_after.mean()})
+
+def get_compare1(all_data, DateRangeA, DateRangeB):
+	DateRangeA, DateRangeB = [str(i) for i in DateRangeA], [str(i) for i in DateRangeB]
+	dfs = [summarize(df)[0] for p, df in all_data.items()]
+	dfs = [df for df in dfs if not df[DateRangeA[0]:DateRangeA[1]].empty and not df[DateRangeB[0]:DateRangeB[1]].empty]
+	DF = pd.concat([compare_stats1(df, DateRangeA, DateRangeB) for df in dfs])
+	DFG = DF.groupby(DF.index)
+	ret = pd.DataFrame({'before_mean': DFG['before'].mean(), 'before_std': DFG['before'].std(),
+	              'after_mean': DFG['after'].mean(), 'after_std': DFG['after'].std()})
+	return ret
+
+
+def f1():
+	CB_start_date = pd.Timestamp('2020-4-7', tz = 'tzlocal()')
+	CB_boundary_gap = pd.to_timedelta('3D')  # at least N days from CB start date
+	CB_boundary_end = pd.to_timedelta('45D')  # at most N days from CB start date
+
+	# Singapore COVID dates: 2020-4-7 2020-6-2 2020-6-19
+	DateRangeA = [CB_start_date - CB_boundary_end, CB_start_date - CB_boundary_gap]
+	DateRangeB = [CB_start_date + CB_boundary_gap, CB_start_date + CB_boundary_end]
+	DateRanges = [DateRangeA, DateRangeB]
+
+	N_user = 25
+	f_getN = lambda s: int(re.search('[0-9]+@', s).group(0)[:-1])
+	f = '5.decrypted/izedAa85XXrDS85XlwrOsIDU/all-data.pson.gz'
+	if os.path.exists(f):
+		print('Loading files ...', end = '')
+		all_data = {k: v for k, v in pandas_load(f).items() if f_getN(k) < N_user}
+		all_cols = all_data[list(all_data.keys())[0]].columns.tolist()
+		print('Finished loading')
+		compare_res = get_compare(all_data, DateRangeA, DateRangeB)
+		print('Done')
+
 if __name__ == '__main__':
 	# 1.
 	# draw('moht.dsth.150@moht.com.sg_e3fb5e097f2b', None, None, 0.0, False, 'heart.csv.gz', 'grouped values by each interval', '1D', 0.0, 21,
@@ -37,6 +86,9 @@ if __name__ == '__main__':
 	# 	 'time chart (bar)', 'value', 'mean', '<entry-count>', False, 'no sort', False, False, False, False, True)
 
 	# 3.
+	f1()
+
+	# 4.
 	os.DateGroup = '30,7,7'
 	PP = group_dates
 	Username = 'moht.dsth.150@moht.com.sg_e3fb5e097f2b'

@@ -44,21 +44,31 @@ def p_test(pop1, pop2, n_perm=10000):
 
 
 def t_test(pop1, pop2):
-	pop1, pop2 = pop1[pop1.notna()].to_numpy(), pop2[pop2.notna()].to_numpy()
-	return '%.5f'%(scipy.stats.ttest_ind(pop1, pop2).pvalue)
-
+	try:
+		pop1, pop2 = pop1[pop1.notna()].to_numpy(), pop2[pop2.notna()].to_numpy()
+		return '%.5f'%(scipy.stats.ttest_ind(pop1, pop2).pvalue)
+	except:
+		return 'error'
 
 def ttest_rel(X1, X2):
-	return '%.5f'%scipy.stats.ttest_rel(X1, X2)[1]
+	try:
+		return '%.5f'%scipy.stats.ttest_rel(X1, X2)[1]
+	except:
+		return 'error'
 
 def wilcoxon(X1, X2):
-	return '%.5f'%scipy.stats.wilcoxon(X1, X2)[1]
+	try:
+		return '%.5f'%scipy.stats.wilcoxon(X1, X2)[1]
+	except:
+		return 'error'
 
 def CI_ttest(X1, X2):
-	cm = sms.CompareMeans(sms.DescrStatsW(X1), sms.DescrStatsW(X2))
-	out = cm.tconfint_diff(usevar='unequal')
-	return '[%.2f, %.2f]'%(out[0], out[1])
-
+	try:
+		cm = sms.CompareMeans(sms.DescrStatsW(X1), sms.DescrStatsW(X2))
+		out = cm.tconfint_diff(usevar='unequal')
+		return '[%.2f, %.2f]'%(out[0], out[1])
+	except:
+		return 'error'
 
 def get_stats(df, funcs=['max']):
 	return [eval('df.%s()' % f) for f in funcs]
@@ -91,7 +101,7 @@ def get_compare(all_data, DateRangeA, DateRangeB):
 	dfs = [df for df in dfs if not df[DateRangeA[0]:DateRangeA[1]].empty and not df[DateRangeB[0]:DateRangeB[1]].empty]
 	DF = pd.concat([compare_stats(df, DateRangeA, DateRangeB) for df in dfs])
 	df_compare = DF.groupby(DF.index).mean()
-	df = pd.concat(dfs)
+	df = pd.concat(dfs).sort_index()
 	df_before = df[DateRangeA[0]:DateRangeA[1]]
 	df_after = df[DateRangeB[0]:DateRangeB[1]]
 	for col in tqdm(df.columns):
