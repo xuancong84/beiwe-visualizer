@@ -359,6 +359,8 @@ def stacked_log(df):
 
 
 ### MAIN
+sys.orig_stderr = sys.stderr
+sys.orig_stdout = sys.stdout
 topNmax = 100
 F1 = {'# of readings in each interval':'.count()', 'max value in each interval':'.max()', 'min value in each interval':'.min()', 'median value in each interval':'.mean()',
 	  'mean value in each interval':'.mean()', 'std in each interval':'.std()', 'sum in each interval':'.sum()', 'grouped values by each interval':''}
@@ -381,8 +383,12 @@ dateoffset0 = widgets.BoundedFloatText(value=0, step=1, description='Date Offset
 interval0 = Dropdown(options=['1min', '5min', '15min', '30min', '1H', '2H', '3H', '6H', '12H', '1D', '2D', '1W', '1M'], value='1D', description='Bin Interval')
 fig, axes, g_prevPlotType, g_lock = None, None, None, False
 def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Function, Interval, IntvShift, CyclePeriod, PlotType, SelCol, Extra, DurCol, ForwardFill,
-		   SortByCol, TakeLog, TakeFFT, DrawArrow, SpreadXYaxis, DoPlot, verbose=1, size_ratio=1, post_processor=None, ax=None, plot_options={}, **kwargs):
-	global fig, axes, g_prevPlotType
+         SortByCol, TakeLog, TakeFFT, DrawArrow, SpreadXYaxis, DoPlot, AppendPlot=False, SuppressMsg=False, cmd_dfa= '', cmd_df= '', verbose=1, size_ratio=1,
+         post_processor=None, ax=None, plot_options={}, **kwargs):
+	global fig, axes, g_prevPlotType, W
+
+	W.clear_output = not AppendPlot
+	sys.stdout, sys.stderr = (io.StringIO(), io.StringIO()) if SuppressMsg else (sys.orig_stdout, sys.orig_stderr)
 
 	if DoPlot!=None and not isinstance(Username, pd.DataFrame) and verbose:
 		print([Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Function, Interval, IntvShift, CyclePeriod,
@@ -420,7 +426,8 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 		g_prevPlotType = PlotType
 
 		if not DoPlot:
-			clear_output()
+			if not AppendPlot:
+				clear_output()
 			return
 
 	# Switch matplot backend
@@ -431,6 +438,10 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 
 	## Execute draw function
 	dfa = load_df(Username, Feature, verbose=verbose)
+	if cmd_dfa:
+		local = locals()
+		exec(cmd_dfa, globals(), local)
+		dfa = local['dfa']
 	if (SelCol=='<timestamp-diff>' or DurCol=='<timestamp-diff>') and '<timestamp-diff>' not in dfa.columns and 'timestamp' in dfa.columns:
 		dfa['<timestamp-diff>'] = dfa['timestamp'].diff().iloc[1:].append(pd.Series(), ignore_index=True)
 	if len(dfa) == 0:
@@ -447,7 +458,10 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 			print(colored('Specified Start Date: %.10s ; End Date: %.10s ;'%(os.start_date, os.end_date), 'red', attrs=['bold']), end=' ')
 
 	# Warn and return if empty
-	os.df = df
+	if cmd_df:
+		local = locals()
+		exec(cmd_df, globals(), local)
+		df = local['df']
 	if df.shape[0] == 0:
 		display(HTML('<font color=red>Warning: selected data is empty</font>'))
 		return
@@ -653,12 +667,12 @@ def update(**kwargs):
 			g_lock = False
 
 W = interactive(update,
-	Username = dropdown_userlist, StartDate = DatePicker(value=None), LastDate = DatePicker(value=None), DateOffset = dateoffset0, ContOffset = Checkbox(value=False, description="Continuous Date Offset"), # 0-4
-	Feature = feature_list0, Function = function_list0, Interval = interval0, IntvShift = intv_shift0, CyclePeriod = cycle_period0, # 5-9
-	PlotType = ['time chart (bar)', 'time chart (line)', 'time chart (scatter)', 'time chart stacked bar', 'time chart stacked area', 'time chart grouped box plot',
-				'value heatmap', 'XY path', 'frequency distribution (h-bar)', 'frequency distribution (pie)', 'histogram of values', 'show pipeline processed data',
-				'display selected/pre-computed data', 'display raw unprocessed data'], Extra = drop1, SelCol = select_column0, DurCol = select_durCol0, ForwardFill = False, # 10-14
-	SortByCol = sort_column, TakeLog = False, TakeFFT = False, DrawArrow = False, SpreadXYaxis = False,
-	DoPlot = ToggleButton(value=False, description='Update Plot') # -2
-	)
+    Username = dropdown_userlist, StartDate = DatePicker(value=None), LastDate = DatePicker(value=None), DateOffset = dateoffset0,
+        ContOffset = Checkbox(value=False, description="Continuous Date Offset"), cmd_dfa = '',  # [0, 6)
+    Feature = feature_list0, Function = function_list0, Interval = interval0, IntvShift = intv_shift0, CyclePeriod = cycle_period0, cmd_df = '',  # [6, 12)
+    PlotType = ['time chart (bar)', 'time chart (line)', 'time chart (scatter)', 'time chart stacked bar', 'time chart stacked area', 'time chart grouped box plot',
+		'value heatmap', 'XY path', 'frequency distribution (h-bar)', 'frequency distribution (pie)', 'histogram of values', 'show pipeline processed data',
+		'display selected/pre-computed data', 'display raw unprocessed data'], Extra = drop1, SelCol = select_column0, DurCol = select_durCol0, ForwardFill = False, AppendPlot = False,  # [12, 18)
+    SortByCol = sort_column, TakeLog = False, TakeFFT = False, DrawArrow = False, SpreadXYaxis = False, SuppressMsg = False, DoPlot = ToggleButton(value=False, description='Update Plot')  # [19, -2]
+)
 
