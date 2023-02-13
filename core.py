@@ -390,7 +390,7 @@ def draw(Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Functio
 	W.clear_output = not AppendPlot
 	sys.stdout, sys.stderr = (io.StringIO(), io.StringIO()) if SuppressMsg else (sys.orig_stdout, sys.orig_stderr)
 
-	if DoPlot!=None and not isinstance(Username, pd.DataFrame) and verbose:
+	if DoPlot and not isinstance(Username, pd.DataFrame) and verbose:
 		print([Username, StartDate, LastDate, DateOffset, ContOffset, Feature, Function, Interval, IntvShift, CyclePeriod,
 			   PlotType, SelCol, Extra, DurCol, ForwardFill, SortByCol, TakeLog, TakeFFT, DrawArrow, SpreadXYaxis, DoPlot])
 

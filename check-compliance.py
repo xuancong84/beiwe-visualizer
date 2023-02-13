@@ -50,6 +50,6 @@ if __name__=='__main__':
 	paths = [path for patn in in_dirs for path in glob(patn)]
 	for path in tqdm(paths):
 		dir_bn = path.rstrip('/')
-		out[os.path.basename(dir_bn)] = comp_compliance(dir_bn)
+		out[os.path.basename(dir_bn).split('@')[0]] = comp_compliance(dir_bn)
 
-	print(pd.Series(out).to_csv())
+	print(pd.Series(out).sort_index().to_csv())
