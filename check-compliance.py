@@ -8,29 +8,35 @@ from utils1 import *
 from tqdm import tqdm
 
 
+file_list = {'accel.csv.gz':'hourly', 'ambientLight.csv.gz':'hourly', 'gps.csv.gz':'daily', 'powerState.csv.gz':'daily', 'smsLog.csv.gz':'daily',
+             'sociabilityMsgLog.csv.gz':'daily', 'tapsLog.csv.gz':'daily', 'accessibilityLog.csv.gz':'daily', 'callLog.csv.gz':'daily',
+             'heart.csv.gz':'hourly', 'sleep.csv.gz':'daily', 'sociabilityCallLog.csv.gz':'daily', 'steps.csv.gz':'daily'}
+
+
 def comp_compliance(dir_bn):
 	bn = os.path.basename(dir_bn)
 	un = bn.split('_')[0]
+	dt = pd.to_timedelta('1s')
 	if un not in df_master.index:
 		return 0.0
 	enrol_date = df_master.loc[un, 'enrol_date']
 	start_date = pd.to_datetime(enrol_date).tz_localize('tzlocal()') + pd.to_timedelta('1D')
-	end_date = min(start_date+pd.to_timedelta(duration), pd.Timestamp.now('tzlocal()').floor('D'))
-	denom = (end_date-start_date)/pd.to_timedelta('1H')
-	end_date -= pd.to_timedelta('1s')
-	if not os.path.exists(dir_bn+'/ambientLight.csv.gz'):
-		sc1 = 0.0
-	else:
-		df1 = load_and_preprocess(dir_bn+'/ambientLight.csv.gz')['value']
-		sr1 = (df1.groupby(pd.Grouper(freq='1H')).count()>0)[start_date:end_date]
-		sc1 = sr1.sum()/denom
-	if not os.path.exists(dir_bn+'/heart.csv.gz'):
-		sc2 = 0.0
-	else:
-		df2 = load_and_preprocess(dir_bn+'/heart.csv.gz')['HR']
-		sr2 = (df2.groupby(pd.Grouper(freq='1H')).count()>0)[start_date:end_date]
-		sc2 = sr2.sum()/denom
-	return (sc1+sc2)*.5
+	end_date = min(start_date+pd.to_timedelta(duration), pd.Timestamp.now('tzlocal()').floor('D')) - dt
+	ret = {}
+	for bn1, type in file_list.items():
+		interval = '1H' if type=='hourly' else '1D'
+		denom = (end_date+dt-start_date)/pd.to_timedelta(interval)
+		fn1 = dir_bn+'/'+bn1
+		if not os.path.exists(fn1):
+			sc1 = 0.0
+		else:
+			df = load_and_preprocess(fn1)
+			df1 = df.iloc[:, 0]
+			sr1 = (df1.groupby(pd.Grouper(freq=interval)).count()>0)[start_date:end_date]
+			sc1 = sr1.sum()/denom
+		ret[bn1.split('.')[0]+f'({type})'] = sc1
+
+	return pd.Series(ret)
 
 
 if __name__=='__main__':
@@ -52,4 +58,6 @@ if __name__=='__main__':
 		dir_bn = path.rstrip('/')
 		out[os.path.basename(dir_bn).split('@')[0]] = comp_compliance(dir_bn)
 
-	print(pd.Series(out).sort_index().to_csv())
+	out_df = pd.DataFrame(out).transpose()
+
+	print(out_df.sort_index().to_csv())
